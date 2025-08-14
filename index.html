@@ -123,7 +123,7 @@
     <p class="subtitle">Official roster form for IBBA league teams • Powered by Pixellot Advantage</p>
 
     <div class="version-info" aria-live="polite">
-      <span id="versionBadge" class="version">Version 3.18.0</span>
+      <span id="versionBadge" class="version">Version 3.20.0</span>
       <span class="date">Updated: August 2025</span>
     </div>
 
@@ -373,10 +373,10 @@
       templateId: "template_6o8secn"
     });
 
-    const DATA_SINK_URL = 'https://script.google.com/macros/s/AKfycby8RqDSLwdRrlcAO8ceX93IzF-UIGLdri_9WcK95jzRlPRQTEm7x1XDEa9fl3myJBD7/exec';
+    const DATA_SINK_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLgtPGmFKToXGgpVaYr8Lhbp1EOtkthqXkZcDxnQMvfmPmKe8gS5b4xQ0R5oNfRksVGxwtUi2RW1WUxJi-msyX3hUQGLLavXkYU-iMi6E6Qse56KuVNo7PHDpnQqPkTtC3rjhJt8-bDyp-zU9Xs9Z5_6TCSfmIxhDaBDnJACtLtQnDm6VUmqVSYVG999aQd5AacnHpbZ7mAFcCeGNcdC1bhNEWkTOb58Sx1slek7ub67QfCSdAwrDrW_aAMNz-3I8anHCUOUEyanAoU-feAQF0QSvpHz0wCY7uU0FSI4e-Gq5TYoLwYCbG6MKlvCGw&lib=MnSJ4wgPw83IcUIv7G_VlZ7aKQbVoPrWq';
     const DATA_SINK_KEY = 'Pixellot2@25';
 
-    const APP_VERSION = '3.18.0';
+    const APP_VERSION = '3.20.0';
     const BUILD_DATE = new Date().toISOString().slice(0,10);
 
     const CURRENT_SEASON_START_YEAR = 2025;
@@ -386,7 +386,7 @@
 
     const DEFAULT_PLAYER_ROWS = 16;
     const HARD_MAX_PLAYERS = 40;
-    const STORAGE_KEY = "ibbaRosterDraft_v3180";
+    const STORAGE_KEY = "ibbaRosterDraft_v3200";
 
     // === Multi-Step Navigation ===
     let currentStep = 1;
@@ -962,7 +962,7 @@
     function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
     async function sendToSheet(roster) {
       if (!DATA_SINK_URL) return true;
-      const url = `${DATA_SINK_URL}?key=${encodeURIComponent(DATA_SINK_KEY)}`;
+      
       const payload = {
         app_version: APP_VERSION,
         build_date: BUILD_DATE,
@@ -976,8 +976,8 @@
         staff: roster.staff
       };
       
-      // Use text/plain content type to avoid CORS preflight issues
-      const fetchOnce = () => fetch(url, { 
+      // Use POST without query parameters since this is a different endpoint format
+      const fetchOnce = () => fetch(DATA_SINK_URL, { 
         method: 'POST', 
         mode: 'no-cors',
         headers: { 
