@@ -123,7 +123,7 @@
     <p class="subtitle">Official roster form for IBBA league teams • Powered by Pixellot Advantage</p>
 
     <div class="version-info" aria-live="polite">
-      <span id="versionBadge" class="version">Version 3.12.0</span>
+      <span id="versionBadge" class="version">Version 3.13.0</span>
       <span class="date">Updated: August 2025</span>
     </div>
 
@@ -171,6 +171,7 @@
                 <option value="לאומית נשים">לאומית נשים</option>
                 <option value="נוער על בנים">נוער על בנים</option>
                 <option value="נערות א על בנות">נערות א על בנות</option>
+                <option value="נערים א לאומית">נערים א לאומית</option>
               </select>
             </div>
             <div class="col-6">
@@ -261,6 +262,7 @@
                 <th style="width:90px">Jersey #</th>
                 <th style="min-width:160px">First Name</th>
                 <th style="min-width:160px">Last Name</th>
+                <th style="width:80px">Height (CM)</th>
                 <th style="width:100px">Position</th>
                 <th style="min-width:220px">Email Address</th>
               </tr>
@@ -374,7 +376,7 @@
     const DATA_SINK_URL = 'https://script.google.com/macros/s/AKfycbxchgyxazvH9t4N0prpLTboqeAlb6kRz6xUj-klQ1HIYtrZjs9qeKxWVqTttVJKdREj/exec';
     const DATA_SINK_KEY = 'Pixellot2@25';
 
-    const APP_VERSION = '3.12.0';
+    const APP_VERSION = '3.13.0';
     const BUILD_DATE = new Date().toISOString().slice(0,10);
 
     const CURRENT_SEASON_START_YEAR = 2025;
@@ -384,7 +386,7 @@
 
     const DEFAULT_PLAYER_ROWS = 16;
     const HARD_MAX_PLAYERS = 40;
-    const STORAGE_KEY = "ibbaRosterDraft_v3120";
+    const STORAGE_KEY = "ibbaRosterDraft_v3130";
 
     // === Multi-Step Navigation ===
     let currentStep = 1;
@@ -506,8 +508,8 @@
       html += '<div class="col-6"><h3>🎯 Players (' + roster.players.length + ')</h3>';
       if (roster.players.length > 0) {
         html += '<ul style="margin: 0; padding-left: 20px;">';
-        roster.players.forEach(p => {
-          html += `<li>#${p.jersey} ${p.firstName} ${p.lastName} (${p.position})${p.email ? ' - ' + p.email : ''}</li>`;
+        roster.players.forEach(p => { 
+          html += `<li>#${p.jersey} ${p.firstName} ${p.lastName}${p.height ? ` (${p.height}cm)` : ''} (${p.position})${p.email ? ' - ' + p.email : ''}</li>`; 
         });
         html += '</ul>';
       } else {
@@ -542,7 +544,8 @@
         'על נשים': 'Womens 1st Division',
         'לאומית נשים': 'Womens 2nd Division',
         'נוער על בנים': 'U19 Mens',
-        'נערות א על בנות': 'U19 Girls'
+        'נערות א על בנות': 'U19 Girls',
+        'נערים א לאומית': 'U16 Mens'
       };
       return map[h] || 'Unknown League';
     }
@@ -582,6 +585,7 @@
           <td><input type="number" min="0" max="99" step="1" name="player${idx}_jersey" class="jersey-input" placeholder="#" inputmode="numeric" aria-label="Jersey number for player ${idx}" /></td>
           <td><input type="text" name="player${idx}_first" placeholder="First name" aria-label="First name for player ${idx}" /></td>
           <td><input type="text" name="player${idx}_last" placeholder="Last name" aria-label="Last name for player ${idx}" /></td>
+          <td><input type="number" min="100" max="999" step="1" name="player${idx}_height" placeholder="CM" inputmode="numeric" maxlength="3" aria-label="Height in CM for player ${idx}" style="text-align: center;" /></td>
           <td>
             <select name="player${idx}_position" aria-label="Position for player ${idx}">
               <option value="">-</option>
@@ -846,8 +850,9 @@
         const last = fd.get(`player${i}_last`);
         const pos = fd.get(`player${i}_position`);
         const email = fd.get(`player${i}_email`);
+        const height = fd.get(`player${i}_height`);
         if (jersey && first && last && pos) {
-          roster.players.push({ number: i, jersey, firstName: ucWords(first), lastName: ucWords(last), position: pos, email });
+          roster.players.push({ number: i, jersey, firstName: ucWords(first), lastName: ucWords(last), position: pos, email, height: height || '' });
         }
       }
 
@@ -886,7 +891,9 @@
       roster.players.forEach(p => { out += `${p.jersey},${p.firstName},${p.lastName},${p.email||''},${p.position||''}\n`; });
       out += `\nPLAYERS (${roster.players.length}):\n`;
       out += '------------------------\n';
-      roster.players.forEach(p => { out += `#${p.jersey} - ${p.firstName} ${p.lastName}${p.position?` (${p.position})`:''}${p.email?` - ${p.email}`:''}\n`; });
+      roster.players.forEach(p => { 
+        out += `#${p.jersey} - ${p.firstName} ${p.lastName}${p.height ? ` (${p.height}cm)` : ''}${p.position?` (${p.position})`:''}${p.email?` - ${p.email}`:''}\n`; 
+      });
       out += `\nCOACHING STAFF (${roster.staff.length}):\n`;
       out += '----------------------------\n';
       roster.staff.forEach(s => { out += `${s.role}: ${s.firstName} ${s.lastName}${s.email?` - ${s.email}`:''}${s.phone?` | ${s.phone}`:''}\n`; });
