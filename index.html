@@ -65,6 +65,12 @@
     .staff-row { background: #f0f9ff !important; }
     .jersey-input { text-align: center; font-weight: 700; }
     .duplicate { border-color: var(--err) !important; background: var(--err-bg) !important; }
+    .invalid-email { border-color: var(--err) !important; background: var(--err-bg) !important; }
+
+    /* Inline field error */
+    .field-error { display:none; margin-top:6px; padding:10px 12px; border-radius:8px;
+      background: var(--err-bg); border:1px solid var(--err-brd); color:#991b1b; font-weight:600; font-size:.9rem; }
+    .input-error { border-color: var(--err) !important; background: var(--err-bg) !important; }
 
     /* Bulk Operations */
     .bulk-ops { margin-bottom: 16px; padding: 20px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #0ea5e9; border-radius: 12px; }
@@ -123,7 +129,7 @@
     <p class="subtitle">Official roster form for IBBA league teams • Powered by Pixellot Advantage</p>
 
     <div class="version-info" aria-live="polite">
-      <span id="versionBadge" class="version">Version 3.22.0</span>
+      <span id="versionBadge" class="version">Version 3.23.2</span>
       <span class="date">Updated: August 2025</span>
     </div>
 
@@ -191,6 +197,8 @@
             <div class="col-6">
               <label for="submitterEmail">Your Email</label>
               <input id="submitterEmail" name="submitterEmail" type="email" placeholder="Enter your email address" autocomplete="email" inputmode="email" required />
+              <!-- Inline error for submitter email -->
+              <div id="submitterEmailError" class="field-error" role="alert" aria-live="assertive"></div>
             </div>
           </div>
         </section>
@@ -201,6 +209,7 @@
         <section class="roster-section" aria-labelledby="players-h">
           <h2 id="players-h">🎯 Player Roster</h2>
           <div id="dupWarn" class="status status--warn" role="alert" aria-live="assertive"></div>
+          <div id="emailWarn" class="status status--warn" role="alert" aria-live="assertive"></div>
           
           <!-- Bulk Operations -->
           <div class="bulk-ops">
@@ -361,7 +370,7 @@
       </div>
 
       <div id="loading" class="loading">🔄 Submitting your roster...</div>
-      <div id="okMsg" class="status status--ok" role="status" aria-live="polite">✅ Roster submitted successfully. Email sent and CSV downloaded.</div>
+      <div id="okMsg" class="status status--ok" role="status" aria-live="polite">✅ Action complete.</div>
     </form>
   </div>
 
@@ -373,20 +382,21 @@
       templateId: "template_6o8secn"
     });
 
+    // NOTE: Avoid exposing secrets client-side. Prefer a server-side proxy with CORS enabled and request signing.
     const DATA_SINK_URL = 'https://script.google.com/macros/s/AKfycbzH1bA7o3x_Px6J7fKMsVPMDz3WYrgFo8BhK-jFIwdKzKOmQttpyBG3iGMqR4FayMDU/exec';
-    const DATA_SINK_KEY = 'Pixellot2@25';
+    const DATA_SINK_KEY = 'Pixellot2@25'; // TODO: move validation off the client and sign requests server-side
 
-    const APP_VERSION = '3.22.0';
+    const APP_VERSION = '3.23.2';
     const BUILD_DATE = new Date().toISOString().slice(0,10);
 
     const CURRENT_SEASON_START_YEAR = 2025;
     const NEXT_SEASON_START_YEAR = 2026;
-    const SWITCHOVER_DATE = new Date(2026, 7, 1);
+    const SWITCHOVER_DATE = new Date(2026, 7, 1); // Month is zero-based: 7 => August
     const FORCE_EXPOSE_NEXT_SEASON = false;
 
     const DEFAULT_PLAYER_ROWS = 16;
     const HARD_MAX_PLAYERS = 40;
-    const STORAGE_KEY = "ibbaRosterDraft_v3220";
+    const STORAGE_KEY = "ibbaRosterDraft_v3232"; // bumped
 
     // === Multi-Step Navigation ===
     let currentStep = 1;
@@ -396,7 +406,6 @@
       const progress = (currentStep / totalSteps) * 100;
       document.getElementById('progressFill').style.width = progress + '%';
       
-      // Update step indicators
       document.querySelectorAll('.step').forEach((step, index) => {
         const stepNum = index + 1;
         step.classList.remove('active', 'completed', 'pending');
@@ -416,9 +425,8 @@
 
     function showStep(step) {
       document.querySelectorAll('.form-step').forEach(el => el.classList.remove('active'));
-      document.querySelector(`.form-step[data-step="${step}"]`).classList.add('active');
+      document.querySelector('.form-step[data-step="' + step + '"]').classList.add('active');
       
-      // Update navigation buttons
       const prevBtn = document.getElementById('prevBtn');
       const nextBtn = document.getElementById('nextBtn');
       const submitBtn = document.getElementById('submitBtn');
@@ -427,120 +435,68 @@
       nextBtn.style.display = step < totalSteps ? 'block' : 'none';
       submitBtn.style.display = step === totalSteps ? 'block' : 'none';
       
-      // Scroll to top
       window.scrollTo({ top: 0, behavior: 'smooth' });
       
-      // Update review content if on review step
       if (step === 4) {
         updateReviewContent();
       }
     }
 
-    function validateCurrentStep() {
-      const currentStepEl = document.querySelector(`.form-step[data-step="${currentStep}"]`);
-      const requiredFields = currentStepEl.querySelectorAll('[required]');
-      
-      for (const field of requiredFields) {
-        if (!field.value.trim()) {
-          field.focus();
-          field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          return false;
-        }
+    // === Email Validation (unified) ===
+    function emailValid(email) {
+      const e = (email || '').trim().toLowerCase();
+      if (!e) return { ok: true };
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return { ok: false };
+      const typoMap = {
+        '.con': '.com', '.cmo': '.com', '.ocm': '.com', '.cpm': '.com',
+        '@gamil.': '@gmail.', '@gmial.': '@gmail.', '@gmai.': '@gmail.',
+        '@yahooo.': '@yahoo.', '@hotmial.': '@hotmail.', '@outlok.': '@outlook.'
+      };
+      for (const k in typoMap) {
+        if (e.includes(k)) return { ok: false, suggestion: e.replace(k, typoMap[k]) };
       }
-      
-      // Additional validation for step 2 (players)
-      if (currentStep === 2) {
-        if (!requireAtLeastOneCompletePlayer()) {
-          alert('Please add at least one complete player (jersey, first, last, position).');
-          return false;
-        }
-        
-        const badRow = validatePlayersCompleteness();
-        if (badRow) {
-          alert(`Player #${badRow} is incomplete. Jersey, First, Last, and Position are all required when adding a player.`);
-          return false;
-        }
-        
-        // Check duplicates
-        checkDuplicates();
-        if (document.getElementById('dupWarn').style.display === 'block') {
-          alert('Resolve duplicate jersey numbers before continuing.');
-          return false;
-        }
-      }
-      
-      return true;
+      return { ok: true };
     }
 
-    function nextStep() {
-      if (!validateCurrentStep()) return;
-      
-      if (currentStep < totalSteps) {
-        currentStep++;
-        showStep(currentStep);
-        updateProgress();
+    function formatEmail(email) {
+      if (!email) return '';
+      return email.trim().toLowerCase();
+    }
+
+    // === Inline error helpers ===
+    function showFieldError(inputEl, msg, errorElId) {
+      const box = document.getElementById(errorElId);
+      if (box) {
+        box.textContent = msg;
+        box.style.display = 'block';
+      }
+      if (inputEl) {
+        inputEl.classList.add('input-error');
+        inputEl.setAttribute('aria-invalid', 'true');
       }
     }
 
-    function prevStep() {
-      if (currentStep > 1) {
-        currentStep--;
-        showStep(currentStep);
-        updateProgress();
+    function clearFieldError(inputEl, errorElId) {
+      const box = document.getElementById(errorElId);
+      if (box) {
+        box.textContent = '';
+        box.style.display = 'none';
+      }
+      if (inputEl) {
+        inputEl.classList.remove('input-error');
+        inputEl.removeAttribute('aria-invalid');
       }
     }
 
-    function updateReviewContent() {
-      const formData = new FormData(document.getElementById('rosterForm'));
-      const roster = buildRoster(formData);
-      
-      let html = '<div class="grid">';
-      
-      // Team Info
-      html += '<div class="col-12"><h3>🏆 Team Information</h3>';
-      html += `<p><strong>Team:</strong> ${roster.teamName}</p>`;
-      html += `<p><strong>League:</strong> ${roster.league} (${roster.leagueEnglish})</p>`;
-      html += `<p><strong>Season:</strong> ${seasonLabel(parseInt(roster.season.split('-')[0], 10))}</p>`;
-      html += `<p><strong>Submitted by:</strong> ${roster.submitterName}</p>`;
-      html += `<p><strong>Email:</strong> ${roster.submitterEmail}</p></div>`;
-      
-      // Players
-      html += '<div class="col-6"><h3>🎯 Players (' + roster.players.length + ')</h3>';
-      if (roster.players.length > 0) {
-        html += '<ul style="margin: 0; padding-left: 20px;">';
-        roster.players.forEach(p => { 
-          const heightText = p.height ? ` | Height: ${p.height}` : '';
-          const emailText = p.email ? ` | Email: ${p.email}` : '';
-          html += `<li>#${p.jersey} - Name: ${p.firstName} ${p.lastName} | Position: ${positionToFullName(p.position)}${heightText}${emailText}</li>`; 
-        });
-        html += '</ul>';
-      } else {
-        html += '<p><em>No players added</em></p>';
-      }
-      html += '</div>';
-      
-      // Staff
-      html += '<div class="col-6"><h3>👨‍💼 Coaching Staff (' + roster.staff.length + ')</h3>';
-      if (roster.staff.length > 0) {
-        html += '<ul style="margin: 0; padding-left: 20px;">';
-        roster.staff.forEach(s => {
-          html += `<li><strong>${s.role}:</strong> ${s.firstName} ${s.lastName}${s.email ? ' - ' + s.email : ''}${s.phone ? ' | ' + s.phone : ''}</li>`;
-        });
-        html += '</ul>';
-      } else {
-        html += '<p><em>No staff added</em></p>';
-      }
-      html += '</div>';
-      
-      html += '</div>';
-      document.getElementById('reviewContent').innerHTML = html;
+    // === Utility Functions ===
+    function ucWords(str) {
+      if (!str) return '';
+      return str.toLowerCase().replace(/\b\w/g, function(ch) { return ch.toUpperCase(); });
     }
+    function clean(s){ return (s ?? '').toString().trim(); }
+    function ucName(s){ return ucWords(clean(s)); }
 
-    // === Utilities ===
-    function ucWords(str="") { return str.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase()); }
-    function emailValid(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
-
-    function leagueToEnglish(h) {
+    function leagueToEnglish(hebrew) {
       const map = {
         'לאומית גברים': 'Mens 2nd Division',
         'על נשים': 'Womens 1st Division',
@@ -549,71 +505,73 @@
         'נערות א על בנות': 'U19 Womens',
         'נערים א לאומית': 'U16 Mens'
       };
-      return map[h] || 'Unknown League';
+      return map[hebrew] || 'Unknown League';
     }
 
     function positionToFullName(pos) {
-      const map = {
-        'G': 'Guard',
-        'F': 'Forward', 
-        'C': 'Center'
-      };
+      const map = { 'G': 'Guard', 'F': 'Forward', 'C': 'Center' };
       return map[pos] || pos;
     }
 
     function seasonLabel(fromYear) {
       const toYear = (fromYear + 1).toString().slice(-2);
-      return `${fromYear}/${toYear}`;
+      return fromYear + '/' + toYear;
     }
 
     function populateSeasonSelect() {
       const sel = document.getElementById('season');
       sel.innerHTML = '';
+      
       const seasons = [CURRENT_SEASON_START_YEAR];
       const exposeNext = FORCE_EXPOSE_NEXT_SEASON || (new Date() >= SWITCHOVER_DATE);
       if (exposeNext) seasons.push(NEXT_SEASON_START_YEAR);
-      for (const y of seasons) {
+      
+      for (let i = 0; i < seasons.length; i++) {
+        const y = seasons[i];
         const opt = document.createElement('option');
-        opt.value = `${y}-${y + 1}`;
+        opt.value = y + '-' + (y + 1);
         opt.textContent = seasonLabel(y);
         sel.appendChild(opt);
       }
-      sel.value = `${exposeNext ? NEXT_SEASON_START_YEAR : CURRENT_SEASON_START_YEAR}-${(exposeNext ? NEXT_SEASON_START_YEAR : CURRENT_SEASON_START_YEAR) + 1}`;
+      
+      if (seasons.length > 0) {
+        const def = exposeNext ? NEXT_SEASON_START_YEAR : CURRENT_SEASON_START_YEAR;
+        sel.value = def + '-' + (def + 1);
+      }
     }
 
     function bumpRowCount() {
       const rows = document.querySelectorAll('#playersTable tr').length;
-      document.getElementById('rowCountHelp').textContent = `${rows} rows (max ${HARD_MAX_PLAYERS})`;
+      document.getElementById('rowCountHelp').textContent = rows + ' rows (max ' + HARD_MAX_PLAYERS + ')';
     }
 
-    // === Players table ===
+    // === Player Table Functions ===
     function playerRowTemplate(idx) {
       const sn = String(idx).padStart(2, '0');
-      return `
-        <tr data-player-row="${idx}">
-          <td><input type="checkbox" class="player-select" data-player="${idx}" /></td>
-          <td><strong>${sn}</strong></td>
-          <td><input type="number" min="0" max="99" step="1" name="player${idx}_jersey" class="jersey-input" placeholder="#" inputmode="numeric" aria-label="Jersey number for player ${idx}" /></td>
-          <td><input type="text" name="player${idx}_first" placeholder="First name" aria-label="First name for player ${idx}" /></td>
-          <td><input type="text" name="player${idx}_last" placeholder="Last name" aria-label="Last name for player ${idx}" /></td>
-          <td><input type="number" min="100" max="999" step="1" name="player${idx}_height" placeholder="CM" inputmode="numeric" maxlength="3" aria-label="Height in CM for player ${idx}" class="jersey-input" /></td>
-          <td>
-            <select name="player${idx}_position" aria-label="Position for player ${idx}">
-              <option value="">-</option>
-              <option value="G">G</option>
-              <option value="F">F</option>
-              <option value="C">C</option>
-            </select>
-          </td>
-          <td><input type="email" name="player${idx}_email" placeholder="Email (optional)" aria-label="Email for player ${idx}" /></td>
-        </tr>`;
+      return '<tr data-player-row="' + idx + '">' +
+        '<td><input type="checkbox" class="player-select" data-player="' + idx + '" /></td>' +
+        '<td><strong>' + sn + '</strong></td>' +
+        '<td><input type="number" min="0" max="99" step="1" name="player' + idx + '_jersey" class="jersey-input" placeholder="#" inputmode="numeric" /></td>' +
+        '<td><input type="text" name="player' + idx + '_first" placeholder="First name" /></td>' +
+        '<td><input type="text" name="player' + idx + '_last" placeholder="Last name" /></td>' +
+        '<td><input type="number" min="100" max="999" step="1" name="player' + idx + '_height" placeholder="CM" inputmode="numeric" class="jersey-input" /></td>' +
+        '<td><select name="player' + idx + '_position">' +
+          '<option value="">-</option>' +
+          '<option value="G">G</option>' +
+          '<option value="F">F</option>' +
+          '<option value="C">C</option>' +
+        '</select></td>' +
+        '<td><input type="email" name="player' + idx + '_email" placeholder="Email (optional)" /></td>' +
+        '</tr>';
     }
 
     function ensureRows(count) {
       const tbody = document.getElementById('playersTable');
       tbody.innerHTML = '';
-      const n = Math.min(HARD_MAX_PLAYERS, Math.max(1, count|0));
-      for (let i = 1; i <= n; i++) tbody.insertAdjacentHTML('beforeend', playerRowTemplate(i));
+      const n = Math.min(HARD_MAX_PLAYERS, Math.max(1, count || 0));
+      for (let i = 1; i <= n; i++) {
+        tbody.insertAdjacentHTML('beforeend', playerRowTemplate(i));
+      }
       hookDuplicateListeners();
       hookBulkSelectionListeners();
       bumpRowCount();
@@ -641,11 +599,11 @@
 
     // === Bulk Operations ===
     function hookBulkSelectionListeners() {
-      // Individual checkboxes
-      document.querySelectorAll('.player-select').forEach(checkbox => {
-        checkbox.removeEventListener('change', handlePlayerSelectChange);
-        checkbox.addEventListener('change', handlePlayerSelectChange);
-      });
+      const checkboxes = document.querySelectorAll('.player-select');
+      for (let i = 0; i < checkboxes.length; i++) {
+        checkboxes[i].removeEventListener('change', handlePlayerSelectChange);
+        checkboxes[i].addEventListener('change', handlePlayerSelectChange);
+      }
     }
 
     function handlePlayerSelectChange() {
@@ -668,10 +626,8 @@
       const selectAllBox = document.getElementById('selectAllPlayers');
       const statusSpan = document.getElementById('selectionCount');
       
-      // Update selection count
-      statusSpan.textContent = `${checkedBoxes.length} player${checkedBoxes.length !== 1 ? 's' : ''} selected`;
+      statusSpan.textContent = checkedBoxes.length + ' player' + (checkedBoxes.length !== 1 ? 's' : '') + ' selected';
       
-      // Update select all state
       if (checkedBoxes.length === 0) {
         selectAllBox.indeterminate = false;
         selectAllBox.checked = false;
@@ -688,10 +644,10 @@
       const selectAll = document.getElementById('selectAllPlayers');
       const checkboxes = document.querySelectorAll('.player-select');
       
-      checkboxes.forEach(checkbox => {
-        checkbox.checked = selectAll.checked;
-        updateRowSelection(checkbox);
-      });
+      for (let i = 0; i < checkboxes.length; i++) {
+        checkboxes[i].checked = selectAll.checked;
+        updateRowSelection(checkboxes[i]);
+      }
       
       updateSelectAllState();
     }
@@ -710,122 +666,84 @@
         return;
       }
       
-      selectedCheckboxes.forEach(checkbox => {
-        const playerNum = checkbox.dataset.player;
-        const positionSelect = document.querySelector(`select[name="player${playerNum}_position"]`);
+      for (let i = 0; i < selectedCheckboxes.length; i++) {
+        const playerNum = selectedCheckboxes[i].dataset.player;
+        const positionSelect = document.querySelector('select[name="player' + playerNum + '_position"]');
         if (positionSelect) {
           positionSelect.value = selectedPosition;
         }
-      });
+      }
       
-      // Reset bulk controls
       document.getElementById('bulkPosition').value = '';
-      flashOk(`Applied ${selectedPosition} position to ${selectedCheckboxes.length} player(s).`);
+      flashOk('Applied ' + selectedPosition + ' position to ' + selectedCheckboxes.length + ' player(s).');
     }
 
     function clearSelected() {
-      document.querySelectorAll('.player-select:checked').forEach(checkbox => {
-        checkbox.checked = false;
-        updateRowSelection(checkbox);
-      });
+      const checkedBoxes = document.querySelectorAll('.player-select:checked');
+      for (let i = 0; i < checkedBoxes.length; i++) {
+        checkedBoxes[i].checked = false;
+        updateRowSelection(checkedBoxes[i]);
+      }
       updateSelectAllState();
     }
 
-    // === Duplicate jersey detection ===
+    // === Duplicate Detection (normalized) ===
     let dupTimer;
     function hookDuplicateListeners() {
-      document.querySelectorAll('input[name*="_jersey"]').forEach(inp => {
-        inp.removeEventListener('input', dupHandler);
-        inp.addEventListener('input', dupHandler);
-      });
+      const inputs = document.querySelectorAll('input[name*="_jersey"]');
+      for (let i = 0; i < inputs.length; i++) {
+        inputs[i].removeEventListener('input', dupHandler);
+        inputs[i].addEventListener('input', dupHandler);
+      }
     }
 
     function dupHandler() {
-      window.clearTimeout(dupTimer);
-      dupTimer = window.setTimeout(checkDuplicates, 350);
+      clearTimeout(dupTimer);
+      dupTimer = setTimeout(checkDuplicates, 350);
+    }
+
+    function normJersey(val){
+      const n = parseInt(String(val).trim(), 10);
+      return Number.isFinite(n) ? String(n) : '';
     }
 
     function checkDuplicates() {
-      const jerseys = Array.from(document.querySelectorAll('input[name*="_jersey"]')).map(i => i.value.trim()).filter(Boolean);
-      const counts = jerseys.reduce((m, v) => (m[v] = (m[v]||0)+1, m), {});
-      let hasDup = false;
+      const jerseyInputs = document.querySelectorAll('input[name*="_jersey"]');
+      const counts = {};
+      jerseyInputs.forEach(inp => {
+        const v = normJersey(inp.value);
+        if (v) counts[v] = (counts[v] || 0) + 1;
+      });
       
-      document.querySelectorAll('input[name*="_jersey"]').forEach(i => {
-        const v = i.value.trim();
-        if (v && counts[v] > 1) { 
-          i.classList.add('duplicate'); 
-          hasDup = true; 
-        } else { 
-          i.classList.remove('duplicate'); 
-        }
+      let hasDup = false;
+      jerseyInputs.forEach(inp => {
+        const v = normJersey(inp.value);
+        if (v && counts[v] > 1) { inp.classList.add('duplicate'); hasDup = true; }
+        else { inp.classList.remove('duplicate'); }
       });
       
       const warn = document.getElementById('dupWarn');
-      if (hasDup) { 
-        warn.style.display = 'block'; 
-        warn.textContent = '⚠️ Duplicate jersey numbers detected. Each player must have a unique number.'; 
-      } else { 
-        warn.style.display = 'none'; 
-        warn.textContent = ''; 
+      if (hasDup) {
+        warn.style.display = 'block';
+        warn.textContent = '⚠️ Duplicate jersey numbers detected. Each player must have a unique number.';
+      } else {
+        warn.style.display = 'none';
+        warn.textContent = '';
       }
     }
 
-    // === Local draft save/restore ===
-    function saveDraft() {
-      const data = new FormData(document.getElementById('rosterForm'));
-      const obj = { currentStep };
-      for (const [k, v] of data.entries()) obj[k] = v;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
-      flashOk('Draft saved locally.');
-    }
-
-    function restoreDraft() {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) { 
-        alert('No draft found.'); 
-        return; 
-      }
-      
-      const obj = JSON.parse(raw);
-      
-      // Restore step
-      if (obj.currentStep) {
-        currentStep = obj.currentStep;
-        showStep(currentStep);
-        updateProgress();
-      }
-      
-      const maxIdx = Math.max(1, ...Object.keys(obj).map(k => (k.match(/player(\d+)_/)||[])[1]).filter(Boolean).map(Number));
-      ensureRows(Math.min(HARD_MAX_PLAYERS, Math.max(DEFAULT_PLAYER_ROWS, maxIdx)));
-      
-      for (const k in obj) {
-        if (k === 'currentStep') continue;
-        const el = document.querySelector(`[name="${CSS.escape(k)}"]`);
-        if (el) el.value = obj[k];
-      }
-      
-      bumpRowCount();
-      checkDuplicates();
-      flashOk('Draft restored.');
-    }
-
-    // === Messaging ===
-    function flashOk(msg) { 
-      const el = document.getElementById('okMsg'); 
-      el.textContent = `✅ ${msg}`; 
-      el.style.display = 'block'; 
-      setTimeout(() => el.style.display = 'none', 3000); 
-    }
-
-    // === Validation helpers ===
+    // === Validation Helpers ===
     function requireAtLeastOneCompletePlayer() {
       const rows = document.querySelectorAll('#playersTable tr').length;
       for (let i = 1; i <= rows; i++) {
-        const jersey = document.querySelector(`input[name="player${i}_jersey"]`)?.value;
-        const first = document.querySelector(`input[name="player${i}_first"]`)?.value;
-        const last = document.querySelector(`input[name="player${i}_last"]`)?.value;
-        const pos = document.querySelector(`select[name="player${i}_position"]`)?.value;
-        if (jersey && first && last && pos) return true;
+        const jersey = document.querySelector('input[name="player' + i + '_jersey"]');
+        const first = document.querySelector('input[name="player' + i + '_first"]');
+        const last = document.querySelector('input[name="player' + i + '_last"]');
+        const pos = document.querySelector('select[name="player' + i + '_position"]');
+        
+        if (jersey && first && last && pos && normJersey(jersey.value) && first.value && last.value && pos.value) {
+          return true;
+        }
       }
       return false;
     }
@@ -833,37 +751,58 @@
     function validatePlayersCompleteness() {
       const rows = document.querySelectorAll('#playersTable tr').length;
       for (let i = 1; i <= rows; i++) {
-        const jersey = document.querySelector(`input[name="player${i}_jersey"]`)?.value;
-        const first = document.querySelector(`input[name="player${i}_first"]`)?.value;
-        const last = document.querySelector(`input[name="player${i}_last"]`)?.value;
-        const pos = document.querySelector(`select[name="player${i}_position"]`)?.value;
-        const any = jersey || first || last || pos;
-        const all = jersey && first && last && pos;
-        if (any && !all) return i;
+        const jersey = document.querySelector('input[name="player' + i + '_jersey"]');
+        const first = document.querySelector('input[name="player' + i + '_first"]');
+        const last = document.querySelector('input[name="player' + i + '_last"]');
+        const pos = document.querySelector('select[name="player' + i + '_position"]');
+        
+        if (jersey && first && last && pos) {
+          const any = normJersey(jersey.value) || first.value || last.value || pos.value;
+          const all = normJersey(jersey.value) && first.value && last.value && pos.value;
+          if (any && !all) return i;
+        }
       }
       return 0;
     }
 
-    // === Build roster ===
+    // === Build Roster Data (normalized) ===
     function buildRoster(fd) {
-      const teamName = fd.get('teamName').trim();
-      const league = fd.get('league');
-      const season = fd.get('season');
-      const submitterName = ucWords(fd.get('submitterName').trim());
-      const submitterEmail = fd.get('submitterEmail').trim();
+      const teamName = clean(fd.get('teamName'));
+      const league = clean(fd.get('league'));
+      const season = clean(fd.get('season'));
+      const submitterName = ucName(fd.get('submitterName'));
+      const submitterEmail = formatEmail(clean(fd.get('submitterEmail')));
 
-      const roster = { teamName, league, leagueEnglish: leagueToEnglish(league), submitterName, submitterEmail, season, players: [], staff: [] };
+      const roster = {
+        teamName: teamName,
+        league: league,
+        leagueEnglish: leagueToEnglish(league),
+        submitterName: submitterName,
+        submitterEmail: submitterEmail,
+        season: season,
+        players: [],
+        staff: []
+      };
 
       const rows = document.querySelectorAll('#playersTable tr').length;
       for (let i = 1; i <= rows; i++) {
-        const jersey = fd.get(`player${i}_jersey`);
-        const first = fd.get(`player${i}_first`);
-        const last = fd.get(`player${i}_last`);
-        const pos = fd.get(`player${i}_position`);
-        const email = fd.get(`player${i}_email`);
-        const height = fd.get(`player${i}_height`);
+        const jersey = normJersey(fd.get('player' + i + '_jersey'));
+        const first = ucName(fd.get('player' + i + '_first'));
+        const last = ucName(fd.get('player' + i + '_last'));
+        const pos = clean(fd.get('player' + i + '_position'));
+        const email = formatEmail(clean(fd.get('player' + i + '_email')));
+        const height = clean(fd.get('player' + i + '_height'));
+        
         if (jersey && first && last && pos) {
-          roster.players.push({ number: i, jersey, firstName: ucWords(first), lastName: ucWords(last), position: pos, email, height: height || '' });
+          roster.players.push({
+            number: i,
+            jersey: jersey,
+            firstName: first,
+            lastName: last,
+            position: pos,
+            email: email,
+            height: height || ''
+          });
         }
       }
 
@@ -875,77 +814,179 @@
         { key: 'gm', label: 'General Manager' }
       ];
       
-      for (const role of staffRoles) {
-        const f = fd.get(`${role.key}_first`);
-        const l = fd.get(`${role.key}_last`);
-        const e = fd.get(`${role.key}_email`);
-        const p = fd.get(`${role.key}_phone`);
-        if (f || l) roster.staff.push({ role: role.label, firstName: ucWords(f||''), lastName: ucWords(l||''), email: e||'', phone: (p||'').trim() });
+      for (let i = 0; i < staffRoles.length; i++) {
+        const role = staffRoles[i];
+        const f = ucName(fd.get(role.key + '_first'));
+        const l = ucName(fd.get(role.key + '_last'));
+        const e = formatEmail(clean(fd.get(role.key + '_email')));
+        const p = clean(fd.get(role.key + '_phone'));
+        
+        if (f || l) {
+          roster.staff.push({
+            role: role.label,
+            firstName: f || '',
+            lastName: l || '',
+            email: e || '',
+            phone: p || ''
+          });
+        }
       }
 
       return roster;
     }
 
-    function rosterSummary(roster) {
-      let out = '';
-      out += 'IBBA TEAM ROSTER SUBMISSION\n';
-      out += '==============================\n';
-      out += `Team: ${roster.teamName}\n`;
-      out += `League: ${roster.league} (${roster.leagueEnglish})\n`;
-      out += `Season: ${roster.season}\n`;
-      out += `Submitted by: ${roster.submitterName}\n`;
-      out += `Email: ${roster.submitterEmail}\n`;
-      out += `Date: ${new Date().toLocaleString()}\n`;
-      out += `Version: ${APP_VERSION}\n\n`;
-      out += 'CSV FORMAT FOR COPYING:\n';
-      out += '=======================\n';
-      roster.players.forEach(p => { out += `${p.jersey},${p.firstName},${p.lastName},${p.email||''},${p.position||''}\n`; });
-      out += `\nPLAYERS (${roster.players.length}):\n`;
-      out += '------------------------\n';
-      roster.players.forEach(p => { 
-        const heightText = p.height ? ` | Height: ${p.height}` : '';
-        const emailText = p.email ? ` | Email: ${p.email}` : '';
-        out += `#${p.jersey} - Name: ${p.firstName} ${p.lastName} | Position: ${positionToFullName(p.position)}${heightText}${emailText}\n`; 
-      });
-      out += `\nCOACHING STAFF (${roster.staff.length}):\n`;
-      out += '----------------------------\n';
-      roster.staff.forEach(s => { out += `${s.role}: ${s.firstName} ${s.lastName}${s.email?` - ${s.email}`:''}${s.phone?` | ${s.phone}`:''}\n`; });
-      return out;
+    // === Safe Review Renderer (no innerHTML with user data) ===
+    function updateReviewContent() {
+      const formData = new FormData(document.getElementById('rosterForm'));
+      const roster = buildRoster(formData);
+      
+      function li(txt) { const el = document.createElement('li'); el.textContent = txt; return el; }
+
+      const root = document.createElement('div');
+      root.className = 'grid';
+      
+      const team = document.createElement('div');
+      team.className = 'col-12';
+      const h3a = document.createElement('h3'); h3a.textContent = '🏆 Team Information';
+      team.append(h3a);
+      const info = [
+        `Team: ${roster.teamName}`,
+        `League: ${roster.league} (${roster.leagueEnglish})`,
+        `Season: ${seasonLabel(parseInt(roster.season.split('-')[0], 10))}`,
+        `Submitted by: ${roster.submitterName}`,
+        `Email: ${roster.submitterEmail}`
+      ];
+      info.forEach(t => { const p = document.createElement('p'); p.textContent = t; team.append(p); });
+      
+      const players = document.createElement('div');
+      players.className = 'col-6';
+      const h3b = document.createElement('h3'); h3b.textContent = `🎯 Players (${roster.players.length})`;
+      players.append(h3b);
+      if (roster.players.length) {
+        const ul = document.createElement('ul'); ul.style.margin = 0; ul.style.paddingLeft = '20px';
+        roster.players.forEach(p => {
+          const heightText = p.height ? ` | Height: ${p.height}` : '';
+          const emailText = p.email ? ` | Email: ${p.email}` : '';
+          ul.append(li(`#${p.jersey} - Name: ${p.firstName} ${p.lastName} | Position: ${positionToFullName(p.position)}${heightText}${emailText}`));
+        });
+        players.append(ul);
+      } else {
+        const em = document.createElement('p'); em.innerHTML = '<em>No players added</em>'; players.append(em);
+      }
+      
+      const staff = document.createElement('div');
+      staff.className = 'col-6';
+      const h3c = document.createElement('h3'); h3c.textContent = `👨‍💼 Coaching Staff (${roster.staff.length})`;
+      staff.append(h3c);
+      if (roster.staff.length) {
+        const ul = document.createElement('ul'); ul.style.margin = 0; ul.style.paddingLeft = '20px';
+        roster.staff.forEach(s => {
+          const parts = [`${s.role}: ${s.firstName} ${s.lastName}`];
+          if (s.email) parts.push(s.email);
+          if (s.phone) parts.push(s.phone);
+          ul.append(li(parts.join(' - ').replace(' - | ', ' | ')));
+        });
+        staff.append(ul);
+      } else {
+        const em = document.createElement('p'); em.innerHTML = '<em>No staff added</em>'; staff.append(em);
+      }
+      
+      root.append(team, players, staff);
+      const container = document.getElementById('reviewContent');
+      container.replaceChildren(root);
     }
 
-    // === CSV ===
+    // === Draft Save/Restore ===
+    function saveDraft() {
+      const data = new FormData(document.getElementById('rosterForm'));
+      const obj = { currentStep: currentStep };
+      for (const pair of data.entries()) {
+        obj[pair[0]] = pair[1];
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+      flashOk('Draft saved locally.');
+    }
+
+    function restoreDraft() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        alert('No draft found.');
+        return;
+      }
+      
+      const obj = JSON.parse(raw);
+      
+      if (obj.currentStep) {
+        currentStep = obj.currentStep;
+        showStep(currentStep);
+        updateProgress();
+      }
+      
+      const playerKeys = Object.keys(obj).filter(function(k) { return k.indexOf('player') === 0; });
+      const maxIdx = Math.max(1, Math.max.apply(Math, playerKeys.map(function(k) {
+        const match = k.match(/player(\d+)_/);
+        return match ? parseInt(match[1], 10) : 1;
+      })));
+      
+      ensureRows(Math.min(HARD_MAX_PLAYERS, Math.max(DEFAULT_PLAYER_ROWS, maxIdx)));
+      
+      for (const k in obj) {
+        if (k === 'currentStep') continue;
+        const el = document.querySelector('[name="' + k + '"]');
+        if (el) el.value = obj[k];
+      }
+      
+      bumpRowCount();
+      checkDuplicates();
+      flashOk('Draft restored.');
+    }
+
+    function flashOk(msg) {
+      const el = document.getElementById('okMsg');
+      el.textContent = '✅ ' + msg;
+      el.style.display = 'block';
+      setTimeout(function() { el.style.display = 'none'; }, 3000);
+    }
+
+    // === CSV Download ===
     function downloadCSV(roster) {
       const BOM = '\uFEFF';
-      let csv = `IBBA Team Roster Submission - Pixellot Advantage - Version ${APP_VERSION}\n`;
-      csv += `Generated: ${new Date().toLocaleString()}\n\n`;
-      csv += `Team Name: ${roster.teamName}\n`;
-      csv += `League: ${roster.leagueEnglish}\n`;
-      csv += `Season: ${roster.season} (${seasonLabel(parseInt(roster.season.split('-')[0], 10))})\n`;
-      csv += `Submitted by: ${roster.submitterName}\n`;
-      csv += `Contact Email: ${roster.submitterEmail}\n\n`;
+      let csv = 'IBBA Team Roster Submission - Pixellot Advantage - Version ' + APP_VERSION + '\n';
+      csv += 'Generated: ' + new Date().toLocaleString() + '\n\n';
+      csv += 'Team Name: ' + roster.teamName + '\n';
+      csv += 'League: ' + roster.leagueEnglish + '\n';
+      csv += 'Season: ' + roster.season + ' (' + seasonLabel(parseInt(roster.season.split('-')[0], 10)) + ')\n';
+      csv += 'Submitted by: ' + roster.submitterName + '\n';
+      csv += 'Contact Email: ' + roster.submitterEmail + '\n\n';
       csv += 'PLAYERS\n';
       csv += 'Jersey,First Name,Last Name,Email,Position\n';
-      roster.players.forEach(p => {
-        csv += `${p.jersey},"${p.firstName}","${p.lastName}","${p.email||''}","${p.position||''}"\n`;
-      });
+      
+      for (let i = 0; i < roster.players.length; i++) {
+        const p = roster.players[i];
+        csv += p.jersey + ',"' + p.firstName + '","' + p.lastName + '","' + (p.email || '') + '","' + (p.position || '') + '"\n';
+      }
+      
       csv += '\nSTAFF\n';
       csv += 'First Name,Last Name,Email,Phone,Role\n';
-      roster.staff.forEach(s => {
-        csv += `"${s.firstName}","${s.lastName}","${s.email||''}","${s.phone||''}","${s.role}"\n`;
-      });
+      
+      for (let i = 0; i < roster.staff.length; i++) {
+        const s = roster.staff[i];
+        csv += '"' + s.firstName + '","' + s.lastName + '","' + (s.email || '') + '","' + (s.phone || '') + '","' + s.role + '"\n';
+      }
+      
       const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ibba_${roster.teamName.replace(/[^a-z0-9\u0590-\u05FF]/gi, '_').toLowerCase()}_${roster.season}_roster_v${APP_VERSION}.csv`;
-      document.body.appendChild(a); 
-      a.click(); 
-      document.body.removeChild(a); 
+      a.download = 'ibba_' + roster.teamName.replace(/[^a-z0-9\u0590-\u05FF]/gi, '_').toLowerCase() + '_' + roster.season + '_roster_v' + APP_VERSION + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
 
-    // === Email (EmailJS REST) ===
-    async function sendEmailViaAPI(params, { signal } = {}) {
+    // === Email API ===
+    async function sendEmailViaAPI(params, options) {
       const url = 'https://api.emailjs.com/api/v1.0/email/send';
       const payload = {
         service_id: EmailJSConfig.serviceId,
@@ -953,19 +994,21 @@
         user_id: EmailJSConfig.publicKey,
         template_params: params
       };
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal });
-      if (!res.ok) throw new Error(`Email API responded ${res.status}`);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: options && options.signal
+      });
+      if (!res.ok) throw new Error('Email API responded ' + res.status);
       return res;
     }
 
-    // === Data sink (Google Sheet) ===
-    function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+    // === Data Sink ===
     async function sendToSheet(roster) {
       if (!DATA_SINK_URL) return true;
       
-      // Add the key parameter to the URL as your script expects
-      const url = `${DATA_SINK_URL}?key=${encodeURIComponent(DATA_SINK_KEY)}`;
-      
+      const url = DATA_SINK_URL + '?key=' + encodeURIComponent(DATA_SINK_KEY);
       const payload = {
         app_version: APP_VERSION,
         build_date: BUILD_DATE,
@@ -979,82 +1022,237 @@
         staff: roster.staff
       };
       
-      // Use text/plain content type to avoid CORS preflight issues
-      const fetchOnce = () => fetch(url, { 
-        method: 'POST', 
-        mode: 'no-cors',
-        headers: { 
-          'Content-Type': 'text/plain;charset=utf-8'
-        }, 
-        body: JSON.stringify(payload) 
-      });
-      
+      // Best-effort fire-and-forget; prefer enabling CORS + JSON on the endpoint and checking res.ok
       for (let attempt = 1; attempt <= 3; attempt++) {
-        try { 
-          await fetchOnce(); 
-          console.log(`Data sink attempt ${attempt} completed to: ${url}`);
-          return true; 
-        }
-        catch (e) { 
-          console.warn(`Data sink attempt ${attempt} failed:`, e);
-          if (attempt === 3) throw e; 
-          await sleep(400 * attempt); 
+        try {
+          await fetch(url, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          });
+          return true;
+        } catch (e) {
+          if (attempt === 3) throw e;
+          await new Promise(function(r) { setTimeout(r, 400 * attempt); });
         }
       }
     }
 
+    function rosterSummary(roster) {
+      let out = 'IBBA TEAM ROSTER SUBMISSION\n==============================\n';
+      out += 'Team: ' + roster.teamName + '\n';
+      out += 'League: ' + roster.league + ' (' + roster.leagueEnglish + ')\n';
+      out += 'Season: ' + roster.season + '\n';
+      out += 'Submitted by: ' + roster.submitterName + '\n';
+      out += 'Email: ' + roster.submitterEmail + '\n';
+      out += 'Date: ' + new Date().toLocaleString() + '\n';
+      out += 'Version: ' + APP_VERSION + '\n\n';
+      out += 'CSV FORMAT FOR COPYING:\n=======================\n';
+      for (let i = 0; i < roster.players.length; i++) {
+        const p = roster.players[i];
+        out += p.jersey + ',' + p.firstName + ',' + p.lastName + ',' + (p.email || '') + ',' + (p.position || '') + '\n';
+      }
+      out += '\nPLAYERS (' + roster.players.length + '):\n------------------------\n';
+      for (let i = 0; i < roster.players.length; i++) {
+        const p = roster.players[i];
+        const heightText = p.height ? ' | Height: ' + p.height : '';
+        const emailText = p.email ? ' | Email: ' + p.email : '';
+        out += '#' + p.jersey + ' - Name: ' + p.firstName + ' ' + p.lastName + ' | Position: ' + positionToFullName(p.position) + heightText + emailText + '\n';
+      }
+      out += '\nCOACHING STAFF (' + roster.staff.length + '):\n----------------------------\n';
+      for (let i = 0; i < roster.staff.length; i++) {
+        const s = roster.staff[i];
+        out += s.role + ': ' + s.firstName + ' ' + s.lastName;
+        if (s.email) out += ' - ' + s.email;
+        if (s.phone) out += ' | ' + s.phone;
+        out += '\n';
+      }
+      return out;
+    }
+
+    // === Step Validation (with inline errors) ===
+    function validateCurrentStep() {
+      const currentStepEl = document.querySelector('.form-step[data-step="' + currentStep + '"]');
+      const requiredFields = currentStepEl.querySelectorAll('[required]');
+      
+      for (let i = 0; i < requiredFields.length; i++) {
+        const field = requiredFields[i];
+        if (!field.value.trim()) {
+          field.focus();
+          field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return false;
+        }
+      }
+      
+      // Step 1: unified email validation with visible error, continue after correction if accepted
+      if (currentStep === 1) {
+        const emailField = document.getElementById('submitterEmail');
+        const raw = emailField.value;
+        clearFieldError(emailField, 'submitterEmailError');
+
+        const { ok, suggestion } = emailValid(raw);
+        if (!ok && suggestion) {
+          const useCorrection = confirm('Email typo detected!\n\nDid you mean: ' + suggestion + ' ?');
+          if (useCorrection) {
+            emailField.value = suggestion; // continue
+          } else {
+            showFieldError(emailField, 'Please correct your email. Suggested: ' + suggestion, 'submitterEmailError');
+            emailField.focus();
+            emailField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return false;
+          }
+        } else if (!ok) {
+          showFieldError(emailField, 'Please enter a valid email address.', 'submitterEmailError');
+          emailField.focus();
+          emailField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return false;
+        }
+      }
+      
+      // Step 2: players email check with consolidated visible warning
+      if (currentStep === 2) {
+        if (!requireAtLeastOneCompletePlayer()) {
+          alert('Please add at least one complete player (jersey, first, last, position).');
+          return false;
+        }
+        
+        const badRow = validatePlayersCompleteness();
+        if (badRow) {
+          alert('Player #' + badRow + ' is incomplete. Jersey, First, Last, and Position are all required when adding a player.');
+          return false;
+        }
+        
+        checkDuplicates();
+        if (document.getElementById('dupWarn').style.display === 'block') {
+          alert('Resolve duplicate jersey numbers before continuing.');
+          return false;
+        }
+
+        const emailWarn = document.getElementById('emailWarn');
+        emailWarn.style.display = 'none';
+        emailWarn.textContent = '';
+
+        const playerEmailInputs = document.querySelectorAll('input[name*="_email"]');
+        for (let i = 0; i < playerEmailInputs.length; i++) {
+          const input = playerEmailInputs[i];
+          const v = (input.value || '').trim();
+          if (!v) continue;
+
+          const { ok, suggestion } = emailValid(v);
+          input.classList.remove('input-error');
+          input.removeAttribute('aria-invalid');
+
+          if (!ok && suggestion) {
+            emailWarn.textContent = 'Please correct player email at row ' + (i + 1) + '. Suggested: ' + suggestion;
+            emailWarn.style.display = 'block';
+            input.classList.add('input-error');
+            input.setAttribute('aria-invalid', 'true');
+            input.focus();
+            input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return false;
+          } else if (!ok) {
+            emailWarn.textContent = 'Invalid player email at row ' + (i + 1) + '.';
+            emailWarn.style.display = 'block';
+            input.classList.add('input-error');
+            input.setAttribute('aria-invalid', 'true');
+            input.focus();
+            input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return false;
+          }
+        }
+      }
+      
+      return true;
+    }
+
+    function nextStep() {
+      if (!validateCurrentStep()) return;
+      if (currentStep < totalSteps) {
+        currentStep++;
+        showStep(currentStep);
+        updateProgress();
+      }
+    }
+
+    function prevStep() {
+      if (currentStep > 1) {
+        currentStep--;
+        showStep(currentStep);
+        updateProgress();
+      }
+    }
+
     // === Initialize ===
-    document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('versionBadge').textContent = `Version ${APP_VERSION}`;
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('versionBadge').textContent = 'Version ' + APP_VERSION;
 
       populateSeasonSelect();
       ensureRows(DEFAULT_PLAYER_ROWS);
       updateProgress();
       
-      // Navigation event listeners
       document.getElementById('nextBtn').addEventListener('click', nextStep);
       document.getElementById('prevBtn').addEventListener('click', prevStep);
-      
-      // Player table controls
       document.getElementById('addRowBtn').addEventListener('click', addRow);
       document.getElementById('removeRowBtn').addEventListener('click', removeRow);
-      
-      // Bulk operations
       document.getElementById('selectAllPlayers').addEventListener('change', toggleSelectAll);
       document.getElementById('applyBulkPosition').addEventListener('click', applyBulkPosition);
       document.getElementById('clearSelected').addEventListener('click', clearSelected);
 
-      // Other controls
-      document.getElementById('clearBtn').addEventListener('click', () => {
+      // Clear submitter email error on input & blur validate if needed
+      const submitterEmailInput = document.getElementById('submitterEmail');
+      submitterEmailInput.addEventListener('input', function() { clearFieldError(this, 'submitterEmailError'); });
+      submitterEmailInput.addEventListener('blur', function() {
+        const { ok, suggestion } = emailValid(this.value);
+        if (!ok && !suggestion) {
+          showFieldError(this, 'Please enter a valid email address.', 'submitterEmailError');
+        }
+      });
+
+      // Clear player email warnings as user edits
+      document.addEventListener('input', function(e) {
+        if (e.target && e.target.name && e.target.name.endsWith('_email')) {
+          e.target.classList.remove('input-error');
+          e.target.removeAttribute('aria-invalid');
+          const emailWarn = document.getElementById('emailWarn');
+          if (emailWarn) { emailWarn.style.display = 'none'; emailWarn.textContent = ''; }
+        }
+      });
+
+      document.getElementById('clearBtn').addEventListener('click', function() {
         if (!confirm('Clear all data (except your name/email if present)?')) return;
-        const keepName = document.getElementById('submitterName').value; 
+        const keepName = document.getElementById('submitterName').value;
         const keepEmail = document.getElementById('submitterEmail').value;
-        document.getElementById('rosterForm').reset(); 
-        ensureRows(DEFAULT_PLAYER_ROWS); 
+        document.getElementById('rosterForm').reset();
+        ensureRows(DEFAULT_PLAYER_ROWS);
         populateSeasonSelect();
-        document.getElementById('submitterName').value = keepName; 
+        document.getElementById('submitterName').value = keepName;
         document.getElementById('submitterEmail').value = keepEmail;
-        document.getElementById('dupWarn').style.display = 'none'; 
-        document.getElementById('okMsg').style.display = 'none'; 
+        document.getElementById('dupWarn').style.display = 'none';
+        document.getElementById('okMsg').style.display = 'none';
+        document.getElementById('emailWarn').style.display = 'none';
+        document.getElementById('submitterEmailError').style.display = 'none';
         document.getElementById('newBtn').style.display = 'none';
-        currentStep = 1; 
-        showStep(currentStep); 
+        currentStep = 1;
+        showStep(currentStep);
         updateProgress();
       });
       
-      document.getElementById('newBtn').addEventListener('click', () => {
-        const keepName = document.getElementById('submitterName').value; 
+      document.getElementById('newBtn').addEventListener('click', function() {
+        const keepName = document.getElementById('submitterName').value;
         const keepEmail = document.getElementById('submitterEmail').value;
-        document.getElementById('rosterForm').reset(); 
-        ensureRows(DEFAULT_PLAYER_ROWS); 
+        document.getElementById('rosterForm').reset();
+        ensureRows(DEFAULT_PLAYER_ROWS);
         populateSeasonSelect();
-        document.getElementById('submitterName').value = keepName; 
+        document.getElementById('submitterName').value = keepName;
         document.getElementById('submitterEmail').value = keepEmail;
-        document.getElementById('dupWarn').style.display = 'none'; 
-        document.getElementById('okMsg').style.display = 'none'; 
+        document.getElementById('dupWarn').style.display = 'none';
+        document.getElementById('okMsg').style.display = 'none';
+        document.getElementById('emailWarn').style.display = 'none';
+        document.getElementById('submitterEmailError').style.display = 'none';
         document.getElementById('newBtn').style.display = 'none';
-        currentStep = 1; 
-        showStep(currentStep); 
+        currentStep = 1;
+        showStep(currentStep);
         updateProgress();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
@@ -1062,8 +1260,7 @@
       document.getElementById('saveBtn').addEventListener('click', saveDraft);
       document.getElementById('restoreBtn').addEventListener('click', restoreDraft);
 
-      // Form submission
-      document.getElementById('rosterForm').addEventListener('submit', async (e) => {
+      document.getElementById('rosterForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         const form = e.currentTarget;
         const submitBtn = document.getElementById('submitBtn');
@@ -1072,10 +1269,22 @@
         ok.style.display = 'none';
 
         const fd = new FormData(form);
-        const submitEmail = fd.get('submitterEmail')?.trim();
-        if (!emailValid(submitEmail)) { 
-          alert('Please enter a valid email address.'); 
-          return; 
+        const submitEmail = fd.get('submitterEmail');
+        if (submitEmail) {
+          const { ok: okEmail, suggestion } = emailValid(submitEmail);
+          clearFieldError(document.getElementById('submitterEmail'), 'submitterEmailError');
+          if (!okEmail && suggestion) {
+            const use = confirm('Did you mean "' + suggestion + '" ?');
+            if (use) {
+              document.getElementById('submitterEmail').value = suggestion; // continue
+            } else {
+              showFieldError(document.getElementById('submitterEmail'), 'Please correct your email. Suggested: ' + suggestion, 'submitterEmailError');
+              return;
+            }
+          } else if (!okEmail) {
+            showFieldError(document.getElementById('submitterEmail'), 'Please enter a valid email address.', 'submitterEmailError');
+            return;
+          }
         }
 
         const roster = buildRoster(fd);
@@ -1088,21 +1297,21 @@
           roster_data: rosterSummary(roster)
         };
 
-        submitBtn.disabled = true; 
+        submitBtn.disabled = true;
         loading.style.display = 'block';
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
+        const timeout = setTimeout(function() { controller.abort(); }, 15000);
 
-        const sinkPromise = sendToSheet(roster).catch(err => { 
-          console.warn('Data sink error:', err); 
-          return false; 
+        const sinkPromise = sendToSheet(roster).catch(function(err) {
+          console.warn('Data sink error:', err);
+          return false;
         });
 
         try {
           await sendEmailViaAPI(params, { signal: controller.signal });
           await sinkPromise;
           downloadCSV(roster);
-          ok.textContent = '✅ Roster submitted successfully! Email sent, data logged, and CSV downloaded.';
+          ok.textContent = '✅ Roster submitted successfully. Email sent and CSV downloaded.';
           ok.style.display = 'block';
           document.getElementById('newBtn').style.display = 'inline-block';
         } catch (err) {
@@ -1114,7 +1323,7 @@
           document.getElementById('newBtn').style.display = 'inline-block';
         } finally {
           clearTimeout(timeout);
-          submitBtn.disabled = false; 
+          submitBtn.disabled = false;
           loading.style.display = 'none';
         }
       });
