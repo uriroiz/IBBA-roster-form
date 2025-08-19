@@ -111,6 +111,179 @@
 
     .step-navigation { display: flex; justify-content: space-between; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--brd); }
 
+    /* === DOUBLE-CLICK PREVENTION STYLES === */
+    .form-submitting {
+      pointer-events: none !important;
+      user-select: none !important;
+      position: relative;
+    }
+
+    .form-submitting::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.8);
+      z-index: 1000;
+      cursor: not-allowed;
+    }
+
+    .btn-submitting {
+      background: #6b7280 !important;
+      color: white !important;
+      pointer-events: none !important;
+      cursor: not-allowed !important;
+      position: relative;
+    }
+
+    .btn-submitting::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 16px;
+      height: 16px;
+      margin: -8px 0 0 -8px;
+      border: 2px solid transparent;
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .submission-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+    }
+
+    .submission-modal {
+      background: white;
+      padding: 40px 30px;
+      border-radius: 16px;
+      text-align: center;
+      max-width: 450px;
+      margin: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      animation: modalAppear 0.3s ease;
+    }
+
+    @keyframes modalAppear {
+      from { opacity: 0; transform: scale(0.9) translateY(-20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .submission-spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #e5e7eb;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    .submission-progress {
+      width: 100%;
+      height: 6px;
+      background: #e5e7eb;
+      border-radius: 3px;
+      margin: 20px 0;
+      overflow: hidden;
+    }
+
+    .submission-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+      border-radius: 3px;
+      transition: width 0.5s ease;
+    }
+
+    .submission-steps {
+      text-align: left;
+      margin-top: 25px;
+      font-size: 14px;
+    }
+
+    .submission-step {
+      display: flex;
+      align-items: center;
+      margin: 8px 0;
+      color: #6b7280;
+    }
+
+    .submission-step.active {
+      color: #3b82f6;
+      font-weight: 600;
+    }
+
+    .submission-step.completed {
+      color: #10b981;
+    }
+
+    .submission-step-icon {
+      width: 16px;
+      height: 16px;
+      margin-right: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: #3b82f6;
+      border-radius: 50%;
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    .quick-message {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 15px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      z-index: 10001;
+      animation: slideInRight 0.3s ease;
+    }
+
+    .quick-message.warning {
+      background: #fbbf24;
+      color: white;
+    }
+
+    .quick-message.info {
+      background: #3b82f6;
+      color: white;
+    }
+
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(100px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
     @media (max-width: 900px) {
       .col-6, .col-4, .col-3 { grid-column: 1 / -1; }
       .container { padding: 18px; }
@@ -120,6 +293,7 @@
       .step-content { margin-left: 8px; }
       .steps { flex-direction: column; gap: 8px; }
       .step::after { display: none; }
+      .submission-modal { margin: 10px; padding: 30px 20px; }
     }
   </style>
 </head>
@@ -129,8 +303,8 @@
     <p class="subtitle">Official roster form for IBBA league teams • Powered by Pixellot Advantage</p>
 
     <div class="version-info" aria-live="polite">
-      <span id="versionBadge" class="version">Version 3.23.4</span>
-      <span class="date">Updated: August 2025</span>
+      <span id="versionBadge" class="version">Version 3.24.0</span>
+      <span class="date">Updated: August 2025 • Production Release</span>
     </div>
 
     <!-- Progress Indicator -->
@@ -385,7 +559,7 @@
     const DATA_SINK_URL = 'https://script.google.com/macros/s/AKfycbzH1bA7o3x_Px6J7fKMsVPMDz3WYrgFo8BhK-jFIwdKzKOmQttpyBG3iGMqR4FayMDU/exec';
     const DATA_SINK_KEY = 'Pixellot2@25';
 
-    const APP_VERSION = '3.23.4';
+    const APP_VERSION = '3.24.0';
     const BUILD_DATE = new Date().toISOString().slice(0,10);
 
     const CURRENT_SEASON_START_YEAR = 2025;
@@ -396,6 +570,22 @@
     const DEFAULT_PLAYER_ROWS = 16;
     const HARD_MAX_PLAYERS = 40;
     const STORAGE_KEY = "ibbaRosterDraft_v3232";
+
+    // === DOUBLE-CLICK PREVENTION GLOBALS ===
+    let submissionState = {
+      isSubmitting: false,
+      lastSubmissionTime: 0,
+      submissionId: null,
+      currentStep: 0,
+      steps: [
+        { id: 'validate', text: 'Validating roster data' },
+        { id: 'email', text: 'Sending confirmation email' },
+        { id: 'save', text: 'Saving to database' },
+        { id: 'download', text: 'Generating CSV file' }
+      ]
+    };
+
+    const MIN_SUBMISSION_INTERVAL = 30000; // 30 seconds between attempts
 
     // === Multi-Step Navigation ===
     let currentStep = 1;
@@ -1073,23 +1263,337 @@
       URL.revokeObjectURL(url);
     }
 
-    // === Email API ===
+    // === DOUBLE-CLICK PREVENTION FUNCTIONS ===
+    
+    function generateSubmissionId() {
+      return 'ibba_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function showQuickMessage(message, type = 'info') {
+      // Show a quick toast message
+      const toast = document.createElement('div');
+      toast.className = 'quick-message ' + type;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // === UI LOCKDOWN FUNCTIONS ===
+    function lockdownUI() {
+      const form = document.getElementById('rosterForm');
+      const container = document.querySelector('.container');
+      const submitBtn = document.getElementById('submitBtn');
+      
+      // Lock entire form
+      form.classList.add('form-submitting');
+      container.style.pointerEvents = 'none';
+      
+      // Lock submit button specifically
+      submitBtn.disabled = true;
+      submitBtn.classList.add('btn-submitting');
+      submitBtn.innerHTML = '<span>Submitting...</span>';
+      
+      // Disable all form inputs
+      const inputs = form.querySelectorAll('input, select, button, textarea');
+      inputs.forEach(input => {
+        input.disabled = true;
+        input.style.pointerEvents = 'none';
+      });
+      
+      // Prevent browser navigation
+      window.addEventListener('beforeunload', preventNavigation);
+    }
+
+    function unlockUI() {
+      const form = document.getElementById('rosterForm');
+      const container = document.querySelector('.container');
+      const submitBtn = document.getElementById('submitBtn');
+      
+      form.classList.remove('form-submitting');
+      container.style.pointerEvents = 'auto';
+      
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('btn-submitting');
+      submitBtn.innerHTML = '🚀 Submit Roster';
+      
+      const inputs = form.querySelectorAll('input, select, button, textarea');
+      inputs.forEach(input => {
+        input.disabled = false;
+        input.style.pointerEvents = 'auto';
+      });
+      
+      window.removeEventListener('beforeunload', preventNavigation);
+    }
+
+    function preventNavigation(e) {
+      e.preventDefault();
+      e.returnValue = 'Your roster is being submitted. Are you sure you want to leave?';
+      return 'Your roster is being submitted. Are you sure you want to leave?';
+    }
+
+    // === SUBMISSION MODAL ===
+    function showSubmissionModal() {
+      // Remove any existing modal
+      const existing = document.getElementById('submission-overlay');
+      if (existing) existing.remove();
+      
+      const overlay = document.createElement('div');
+      overlay.id = 'submission-overlay';
+      overlay.className = 'submission-overlay';
+      
+      overlay.innerHTML = `
+        <div class="submission-modal">
+          <div class="submission-spinner"></div>
+          <h3 style="margin: 0 0 10px; color: #1f2937;">Submitting Your Roster</h3>
+          <p style="margin: 0 0 20px; color: #6b7280;">Please don't close this window or navigate away</p>
+          
+          <div class="submission-progress">
+            <div class="submission-progress-bar" id="progress-bar" style="width: 0%"></div>
+          </div>
+          
+          <div class="submission-steps" id="submission-steps">
+            ${submissionState.steps.map((step, index) => `
+              <div class="submission-step" id="step-${step.id}">
+                <div class="submission-step-icon" id="icon-${step.id}">
+                  <div class="pulse-dot"></div>
+                </div>
+                <span>${step.text}</span>
+              </div>
+            `).join('')}
+          </div>
+          
+          <div style="margin-top: 25px; font-size: 12px; color: #9ca3af;">
+            Submission ID: <code>${submissionState.submissionId}</code>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(overlay);
+      
+      // Make it impossible to close
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      });
+    }
+
+    function updateSubmissionProgress() {
+      const progress = ((submissionState.currentStep + 1) / submissionState.steps.length) * 100;
+      const progressBar = document.getElementById('progress-bar');
+      if (progressBar) {
+        progressBar.style.width = progress + '%';
+      }
+      
+      // Update step visual states
+      submissionState.steps.forEach((step, index) => {
+        const stepEl = document.getElementById(`step-${step.id}`);
+        const iconEl = document.getElementById(`icon-${step.id}`);
+        
+        if (!stepEl || !iconEl) return;
+        
+        if (index < submissionState.currentStep) {
+          // Completed
+          stepEl.className = 'submission-step completed';
+          iconEl.innerHTML = '✓';
+        } else if (index === submissionState.currentStep) {
+          // Active
+          stepEl.className = 'submission-step active';
+          iconEl.innerHTML = '<div class="pulse-dot"></div>';
+        } else {
+          // Pending
+          stepEl.className = 'submission-step';
+          iconEl.innerHTML = '<div style="width:8px;height:8px;background:#e5e7eb;border-radius:50%;"></div>';
+        }
+      });
+    }
+
+    function hideSubmissionModal() {
+      const overlay = document.getElementById('submission-overlay');
+      if (overlay) {
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 300);
+      }
+    }
+
+    // === MAIN SUBMISSION PROCESS ===
+    async function updateStep(stepId, action) {
+      submissionState.currentStep = submissionState.steps.findIndex(s => s.id === stepId);
+      updateSubmissionProgress();
+      
+      await action();
+      
+      // Mark as completed
+      const stepEl = document.getElementById(`step-${stepId}`);
+      const iconEl = document.getElementById(`icon-${stepId}`);
+      if (stepEl && iconEl) {
+        stepEl.className = 'submission-step completed';
+        iconEl.innerHTML = '✓';
+      }
+    }
+
+    async function processSubmission() {
+      const form = document.getElementById('rosterForm');
+      const fd = new FormData(form);
+      
+      try {
+        // Step 1: Validation
+        await updateStep('validate', async () => {
+          console.log('📋 Validating data...');
+          
+          // Your existing validation logic
+          const submitEmail = fd.get('submitterEmail');
+          if (submitEmail) {
+            const { ok: okEmail, suggestion } = emailValid(submitEmail);
+            if (!okEmail && suggestion) {
+              const use = confirm('Did you mean "' + suggestion + '" ?');
+              if (use) {
+                document.getElementById('submitterEmail').value = suggestion;
+                fd.set('submitterEmail', suggestion);
+              } else {
+                throw new Error('Email validation failed');
+              }
+            } else if (!okEmail) {
+              throw new Error('Invalid email address');
+            }
+          }
+          
+          await delay(1000); // Ensure user sees the step
+        });
+        
+        const roster = buildRoster(fd);
+        const submissionParams = {
+          submission_id: submissionState.submissionId,
+          team_name: roster.teamName,
+          league: roster.leagueEnglish,
+          submitter_name: roster.submitterName,
+          submitter_email: roster.submitterEmail,
+          season: roster.season,
+          roster_data: rosterSummary(roster),
+          timestamp: new Date().toISOString()
+        };
+        
+        // Step 2: Send Email
+        await updateStep('email', async () => {
+          console.log('📧 Sending email...');
+          
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 20000); // 20 second timeout
+          
+          try {
+            await sendEmailViaAPI(submissionParams, { signal: controller.signal });
+            console.log('✅ Email sent successfully');
+          } finally {
+            clearTimeout(timeout);
+          }
+        });
+        
+        // Step 3: Save Data
+        await updateStep('save', async () => {
+          console.log('💾 Saving data...');
+          
+          try {
+            await sendToSheet(roster);
+            console.log('✅ Data saved successfully');
+          } catch (error) {
+            console.warn('⚠️ Data save failed, continuing anyway:', error);
+            // Don't fail the whole process for data sink issues
+          }
+        });
+        
+        // Step 4: Generate File
+        await updateStep('download', async () => {
+          console.log('📁 Generating file...');
+          downloadCSV(roster);
+          await delay(1000); // Let download start
+          console.log('✅ File generated');
+        });
+        
+        // Success!
+        showSubmissionSuccess();
+        
+      } catch (error) {
+        console.error('💥 Process failed:', error);
+        throw error;
+      }
+    }
+
+    // === SUCCESS AND ERROR HANDLING ===
+    function showSubmissionSuccess() {
+      hideSubmissionModal();
+      unlockUI();
+      
+      const ok = document.getElementById('okMsg');
+      ok.textContent = '✅ Roster submitted successfully! Email sent and CSV downloaded.';
+      ok.style.display = 'block';
+      document.getElementById('newBtn').style.display = 'inline-block';
+      
+      // Keep submit button in success state
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.classList.remove('btn-submitting');
+      submitBtn.classList.add('btn-success');
+      submitBtn.innerHTML = '✅ Successfully Submitted';
+      submitBtn.disabled = true; // Keep disabled to prevent resubmission
+    }
+
+    function handleSubmissionError(error) {
+      hideSubmissionModal();
+      unlockUI();
+      
+      submissionState.isSubmitting = false; // Allow retry on error
+      
+      alert(`Submission failed: ${error.message}\n\nPlease try again or contact support if the problem persists.\n\nSubmission ID: ${submissionState.submissionId}`);
+      
+      console.error('Submission error details:', {
+        submissionId: submissionState.submissionId,
+        error: error,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // === ENHANCED EMAIL API ===
     async function sendEmailViaAPI(params, options) {
       const url = 'https://api.emailjs.com/api/v1.0/email/send';
+      
       const payload = {
         service_id: EmailJSConfig.serviceId,
         template_id: EmailJSConfig.templateId,
         user_id: EmailJSConfig.publicKey,
         template_params: params
       };
-      const res = await fetch(url, {
+      
+      const requestOptions = {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: options && options.signal
-      });
-      if (!res.ok) throw new Error('Email API responded ' + res.status);
-      return res;
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Request-ID': params.submission_id // Idempotency header
+        },
+        body: JSON.stringify(payload)
+      };
+      
+      if (options?.signal) {
+        requestOptions.signal = options.signal;
+      }
+      
+      console.log('📧 Sending email with ID:', params.submission_id);
+      
+      const response = await fetch(url, requestOptions);
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(`Email API failed (${response.status}): ${errorText}`);
+      }
+      
+      return response;
     }
 
     // === Data Sink ===
@@ -1315,6 +1819,63 @@
       }
     }
 
+    // === IMPROVED SUBMISSION HANDLER ===
+    function setupImprovedSubmissionHandler() {
+      const form = document.getElementById('rosterForm');
+      
+      // Remove existing listeners by cloning the form
+      const newForm = form.cloneNode(true);
+      form.parentNode.replaceChild(newForm, form);
+      
+      // Add new, improved handler
+      document.getElementById('rosterForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('🚀 Submit attempt at:', new Date().toISOString());
+        
+        // IMMEDIATE PREVENTION CHECKS
+        const now = Date.now();
+        
+        if (submissionState.isSubmitting) {
+          console.log('❌ Already submitting, blocked');
+          showQuickMessage('Submission already in progress!', 'warning');
+          return false;
+        }
+        
+        if (now - submissionState.lastSubmissionTime < MIN_SUBMISSION_INTERVAL) {
+          const waitTime = Math.ceil((MIN_SUBMISSION_INTERVAL - (now - submissionState.lastSubmissionTime)) / 1000);
+          console.log(`❌ Too soon, blocked. Wait ${waitTime} seconds`);
+          showQuickMessage(`Please wait ${waitTime} more seconds before submitting again.`, 'warning');
+          return false;
+        }
+        
+        // SET STATE IMMEDIATELY
+        submissionState.isSubmitting = true;
+        submissionState.lastSubmissionTime = now;
+        submissionState.submissionId = generateSubmissionId();
+        submissionState.currentStep = 0;
+        
+        console.log('✅ Submission started with ID:', submissionState.submissionId);
+        
+        // IMMEDIATE UI LOCKDOWN
+        lockdownUI();
+        showSubmissionModal();
+        
+        try {
+          await processSubmission();
+        } catch (error) {
+          console.error('💥 Submission failed:', error);
+          handleSubmissionError(error);
+        } finally {
+          // Only reset state on completion or error
+          setTimeout(() => {
+            submissionState.isSubmitting = false;
+          }, 5000); // Keep locked for 5 more seconds after completion
+        }
+      });
+    }
+
     // === Initialize ===
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('versionBadge').textContent = 'Version ' + APP_VERSION;
@@ -1322,6 +1883,9 @@
       populateSeasonSelect();
       ensureRows(DEFAULT_PLAYER_ROWS);
       updateProgress();
+      
+      // Setup improved submission handler
+      setupImprovedSubmissionHandler();
       
       document.getElementById('nextBtn').addEventListener('click', nextStep);
       document.getElementById('prevBtn').addEventListener('click', prevStep);
@@ -1368,6 +1932,10 @@
         currentStep = 1;
         showStep(currentStep);
         updateProgress();
+        // Reset submission state
+        submissionState.isSubmitting = false;
+        submissionState.lastSubmissionTime = 0;
+        setupImprovedSubmissionHandler();
       });
       
       document.getElementById('newBtn').addEventListener('click', function() {
@@ -1387,78 +1955,16 @@
         showStep(currentStep);
         updateProgress();
         window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Reset submission state
+        submissionState.isSubmitting = false;
+        submissionState.lastSubmissionTime = 0;
+        setupImprovedSubmissionHandler();
       });
 
       document.getElementById('saveBtn').addEventListener('click', saveDraft);
       document.getElementById('restoreBtn').addEventListener('click', restoreDraft);
-
-      document.getElementById('rosterForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const form = e.currentTarget;
-        const submitBtn = document.getElementById('submitBtn');
-        const loading = document.getElementById('loading');
-        const ok = document.getElementById('okMsg');
-        ok.style.display = 'none';
-
-        const fd = new FormData(form);
-        const submitEmail = fd.get('submitterEmail');
-        if (submitEmail) {
-          const { ok: okEmail, suggestion } = emailValid(submitEmail);
-          clearFieldError(document.getElementById('submitterEmail'), 'submitterEmailError');
-          if (!okEmail && suggestion) {
-            const use = confirm('Did you mean "' + suggestion + '" ?');
-            if (use) {
-              document.getElementById('submitterEmail').value = suggestion;
-            } else {
-              showFieldError(document.getElementById('submitterEmail'), 'Please correct your email. Suggested: ' + suggestion, 'submitterEmailError');
-              return;
-            }
-          } else if (!okEmail) {
-            showFieldError(document.getElementById('submitterEmail'), 'Please enter a valid email address.', 'submitterEmailError');
-            return;
-          }
-        }
-
-        const roster = buildRoster(fd);
-        const params = {
-          team_name: roster.teamName,
-          league: roster.leagueEnglish,
-          submitter_name: roster.submitterName,
-          submitter_email: roster.submitterEmail,
-          season: roster.season,
-          roster_data: rosterSummary(roster)
-        };
-
-        submitBtn.disabled = true;
-        loading.style.display = 'block';
-        const controller = new AbortController();
-        const timeout = setTimeout(function() { controller.abort(); }, 15000);
-
-        const sinkPromise = sendToSheet(roster).catch(function(err) {
-          console.warn('Data sink error:', err);
-          return false;
-        });
-
-        try {
-          await sendEmailViaAPI(params, { signal: controller.signal });
-          await sinkPromise;
-          downloadCSV(roster);
-          ok.textContent = '✅ Roster submitted successfully. Email sent and CSV downloaded.';
-          ok.style.display = 'block';
-          document.getElementById('newBtn').style.display = 'inline-block';
-        } catch (err) {
-          console.error('Email API error:', err);
-          alert('Email sending failed. A CSV file will be downloaded instead. Please email it to pixellotibba@gmail.com.');
-          downloadCSV(roster);
-          ok.textContent = '⚠️ Email failed. CSV downloaded as fallback. Data sink may or may not have succeeded.';
-          ok.style.display = 'block';
-          document.getElementById('newBtn').style.display = 'inline-block';
-        } finally {
-          clearTimeout(timeout);
-          submitBtn.disabled = false;
-          loading.style.display = 'none';
-        }
-      });
+      
+      console.log('🛡️ IBBA Form with double-click prevention initialized');
     });
   </script>
 </body>
