@@ -386,7 +386,7 @@
     const DATA_SINK_URL = 'https://script.google.com/macros/s/AKfycbzH1bA7o3x_Px6J7fKMsVPMDz3WYrgFo8BhK-jFIwdKzKOmQttpyBG3iGMqR4FayMDU/exec';
     const DATA_SINK_KEY = 'Pixellot2@25'; // TODO: move validation off the client and sign requests server-side
 
-    const APP_VERSION = '3.23.2';
+    const APP_VERSION = '3.23.3';
     const BUILD_DATE = new Date().toISOString().slice(0,10);
 
     const CURRENT_SEASON_START_YEAR = 2025;
@@ -396,7 +396,7 @@
 
     const DEFAULT_PLAYER_ROWS = 16;
     const HARD_MAX_PLAYERS = 40;
-    const STORAGE_KEY = "ibbaRosterDraft_v3232"; // bumped
+    const STORAGE_KEY = "ibbaRosterDraft_v3233"; // bumped for sorting feature
 
     // === Multi-Step Navigation ===
     let currentStep = 1;
@@ -543,6 +543,15 @@
     function bumpRowCount() {
       const rows = document.querySelectorAll('#playersTable tr').length;
       document.getElementById('rowCountHelp').textContent = rows + ' rows (max ' + HARD_MAX_PLAYERS + ')';
+    }
+
+    // === Player Sorting Function ===
+    function sortPlayersByJersey(players) {
+      return players.sort((a, b) => {
+        const jerseyA = parseInt(a.jersey) || 0;
+        const jerseyB = parseInt(b.jersey) || 0;
+        return jerseyA - jerseyB;
+      });
     }
 
     // === Player Table Functions ===
@@ -765,7 +774,7 @@
       return 0;
     }
 
-    // === Build Roster Data (normalized) ===
+    // === Build Roster Data (normalized and sorted) ===
     function buildRoster(fd) {
       const teamName = clean(fd.get('teamName'));
       const league = clean(fd.get('league'));
@@ -806,6 +815,9 @@
         }
       }
 
+      // Sort players by jersey number
+      roster.players = sortPlayersByJersey(roster.players);
+
       const staffRoles = [
         { key: 'coach', label: 'Head Coach' },
         { key: 'asst1', label: 'Assistant Coach 1' },
@@ -835,7 +847,7 @@
       return roster;
     }
 
-    // === Safe Review Renderer (no innerHTML with user data) ===
+    // === Safe Review Renderer (no innerHTML with user data, sorted display) ===
     function updateReviewContent() {
       const formData = new FormData(document.getElementById('rosterForm'));
       const roster = buildRoster(formData);
@@ -860,7 +872,7 @@
       
       const players = document.createElement('div');
       players.className = 'col-6';
-      const h3b = document.createElement('h3'); h3b.textContent = `🎯 Players (${roster.players.length})`;
+      const h3b = document.createElement('h3'); h3b.textContent = `🎯 Players (${roster.players.length}) - Sorted by Jersey #`;
       players.append(h3b);
       if (roster.players.length) {
         const ul = document.createElement('ul'); ul.style.margin = 0; ul.style.paddingLeft = '20px';
@@ -948,7 +960,7 @@
       setTimeout(function() { el.style.display = 'none'; }, 3000);
     }
 
-    // === CSV Download ===
+    // === CSV Download (sorted by jersey number) ===
     function downloadCSV(roster) {
       const BOM = '\uFEFF';
       let csv = 'IBBA Team Roster Submission - Pixellot Advantage - Version ' + APP_VERSION + '\n';
@@ -958,12 +970,13 @@
       csv += 'Season: ' + roster.season + ' (' + seasonLabel(parseInt(roster.season.split('-')[0], 10)) + ')\n';
       csv += 'Submitted by: ' + roster.submitterName + '\n';
       csv += 'Contact Email: ' + roster.submitterEmail + '\n\n';
-      csv += 'PLAYERS\n';
-      csv += 'Jersey,First Name,Last Name,Email,Position\n';
+      csv += 'PLAYERS (Sorted by Jersey Number)\n';
+      csv += 'Jersey,First Name,Last Name,Email,Position,Height\n';
       
+      // Players are already sorted by jersey number in buildRoster()
       for (let i = 0; i < roster.players.length; i++) {
         const p = roster.players[i];
-        csv += p.jersey + ',"' + p.firstName + '","' + p.lastName + '","' + (p.email || '') + '","' + (p.position || '') + '"\n';
+        csv += p.jersey + ',"' + p.firstName + '","' + p.lastName + '","' + (p.email || '') + '","' + (p.position || '') + '","' + (p.height || '') + '"\n';
       }
       
       csv += '\nSTAFF\n';
@@ -1018,7 +1031,7 @@
         league_english: roster.leagueEnglish,
         submitter_name: roster.submitterName,
         submitter_email: roster.submitterEmail,
-        players: roster.players,
+        players: roster.players, // Already sorted
         staff: roster.staff
       };
       
@@ -1039,6 +1052,7 @@
       }
     }
 
+    // === Roster Summary (sorted by jersey number) ===
     function rosterSummary(roster) {
       let out = 'IBBA TEAM ROSTER SUBMISSION\n==============================\n';
       out += 'Team: ' + roster.teamName + '\n';
@@ -1048,19 +1062,23 @@
       out += 'Email: ' + roster.submitterEmail + '\n';
       out += 'Date: ' + new Date().toLocaleString() + '\n';
       out += 'Version: ' + APP_VERSION + '\n\n';
-      out += 'CSV FORMAT FOR COPYING:\n=======================\n';
+      out += 'CSV FORMAT FOR COPYING (Sorted by Jersey #):\n============================================\n';
+      
+      // Players are already sorted by jersey number in buildRoster()
       for (let i = 0; i < roster.players.length; i++) {
         const p = roster.players[i];
         out += p.jersey + ',' + p.firstName + ',' + p.lastName + ',' + (p.email || '') + ',' + (p.position || '') + '\n';
       }
-      out += '\nPLAYERS (' + roster.players.length + '):\n------------------------\n';
+      
+      out += '\nPLAYERS (' + roster.players.length + ') - Sorted by Jersey Number:\n' + '-'.repeat(60) + '\n';
       for (let i = 0; i < roster.players.length; i++) {
         const p = roster.players[i];
         const heightText = p.height ? ' | Height: ' + p.height : '';
         const emailText = p.email ? ' | Email: ' + p.email : '';
         out += '#' + p.jersey + ' - Name: ' + p.firstName + ' ' + p.lastName + ' | Position: ' + positionToFullName(p.position) + heightText + emailText + '\n';
       }
-      out += '\nCOACHING STAFF (' + roster.staff.length + '):\n----------------------------\n';
+      
+      out += '\nCOACHING STAFF (' + roster.staff.length + '):\n' + '-'.repeat(30) + '\n';
       for (let i = 0; i < roster.staff.length; i++) {
         const s = roster.staff[i];
         out += s.role + ': ' + s.firstName + ' ' + s.lastName;
