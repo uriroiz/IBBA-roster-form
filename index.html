@@ -129,7 +129,7 @@
     <p class="subtitle">Official roster form for IBBA league teams • Powered by Pixellot Advantage</p>
 
     <div class="version-info" aria-live="polite">
-      <span id="versionBadge" class="version">Version 3.23.3</span>
+      <span id="versionBadge" class="version">Version 3.23.4</span>
       <span class="date">Updated: August 2025</span>
     </div>
 
@@ -301,11 +301,11 @@
               <tr class="staff-row">
                 <td>17</td>
                 <td><strong>Head Coach</strong></td>
-                <td><input type="text" name="coach_first" placeholder="First name" /></td>
-                <td><input type="text" name="coach_last" placeholder="Last name" /></td>
+                <td><input type="text" name="coach_first" placeholder="First name" required /></td>
+                <td><input type="text" name="coach_last" placeholder="Last name" required /></td>
                 <td>-</td>
-                <td><input type="email" name="coach_email" placeholder="Email (optional)" /></td>
-                <td><input type="tel" name="coach_phone" placeholder="Phone (optional)" inputmode="tel" /></td>
+                <td><input type="email" name="coach_email" placeholder="Email" /></td>
+                <td><input type="tel" name="coach_phone" placeholder="Phone" inputmode="tel" /></td>
               </tr>
               <tr class="staff-row">
                 <td>18</td>
@@ -313,8 +313,8 @@
                 <td><input type="text" name="asst1_first" placeholder="First name" /></td>
                 <td><input type="text" name="asst1_last" placeholder="Last name" /></td>
                 <td>-</td>
-                <td><input type="email" name="asst1_email" placeholder="Email (optional)" /></td>
-                <td><input type="tel" name="asst1_phone" placeholder="Phone (optional)" inputmode="tel" /></td>
+                <td><input type="email" name="asst1_email" placeholder="Email" /></td>
+                <td><input type="tel" name="asst1_phone" placeholder="Phone" inputmode="tel" /></td>
               </tr>
               <tr class="staff-row">
                 <td>19</td>
@@ -322,8 +322,8 @@
                 <td><input type="text" name="asst2_first" placeholder="First name" /></td>
                 <td><input type="text" name="asst2_last" placeholder="Last name" /></td>
                 <td>-</td>
-                <td><input type="email" name="asst2_email" placeholder="Email (optional)" /></td>
-                <td><input type="tel" name="asst2_phone" placeholder="Phone (optional)" inputmode="tel" /></td>
+                <td><input type="email" name="asst2_email" placeholder="Email" /></td>
+                <td><input type="tel" name="asst2_phone" placeholder="Phone" inputmode="tel" /></td>
               </tr>
               <tr class="staff-row">
                 <td>20</td>
@@ -331,8 +331,8 @@
                 <td><input type="text" name="asst3_first" placeholder="First name" /></td>
                 <td><input type="text" name="asst3_last" placeholder="Last name" /></td>
                 <td>-</td>
-                <td><input type="email" name="asst3_email" placeholder="Email (optional)" /></td>
-                <td><input type="tel" name="asst3_phone" placeholder="Phone (optional)" inputmode="tel" /></td>
+                <td><input type="email" name="asst3_email" placeholder="Email" /></td>
+                <td><input type="tel" name="asst3_phone" placeholder="Phone" inputmode="tel" /></td>
               </tr>
               <tr class="staff-row">
                 <td>21</td>
@@ -340,8 +340,8 @@
                 <td><input type="text" name="gm_first" placeholder="First name" /></td>
                 <td><input type="text" name="gm_last" placeholder="Last name" /></td>
                 <td>-</td>
-                <td><input type="email" name="gm_email" placeholder="Email (optional)" /></td>
-                <td><input type="tel" name="gm_phone" placeholder="Phone (optional)" inputmode="tel" /></td>
+                <td><input type="email" name="gm_email" placeholder="Email" /></td>
+                <td><input type="tel" name="gm_phone" placeholder="Phone" inputmode="tel" /></td>
               </tr>
             </tbody>
           </table>
@@ -386,7 +386,7 @@
     const DATA_SINK_URL = 'https://script.google.com/macros/s/AKfycbzH1bA7o3x_Px6J7fKMsVPMDz3WYrgFo8BhK-jFIwdKzKOmQttpyBG3iGMqR4FayMDU/exec';
     const DATA_SINK_KEY = 'Pixellot2@25'; // TODO: move validation off the client and sign requests server-side
 
-    const APP_VERSION = '3.23.3';
+    const APP_VERSION = '3.23.4'; // Bumped version for fixes
     const BUILD_DATE = new Date().toISOString().slice(0,10);
 
     const CURRENT_SEASON_START_YEAR = 2025;
@@ -396,7 +396,8 @@
 
     const DEFAULT_PLAYER_ROWS = 16;
     const HARD_MAX_PLAYERS = 40;
-    const STORAGE_KEY = "ibbaRosterDraft_v3233"; // bumped for sorting feature
+    const MIN_REQUIRED_PLAYERS = 8; // NEW: Minimum required players for submission
+    const STORAGE_KEY = "ibbaRosterDraft_v3234"; // bumped for new validation features
 
     // === Multi-Step Navigation ===
     let currentStep = 1;
@@ -741,20 +742,31 @@
       }
     }
 
-    // === Validation Helpers ===
-    function requireAtLeastOneCompletePlayer() {
+    // === NEW: Enhanced Validation Functions ===
+    function countCompletePlayers() {
       const rows = document.querySelectorAll('#playersTable tr').length;
+      let count = 0;
       for (let i = 1; i <= rows; i++) {
         const jersey = document.querySelector('input[name="player' + i + '_jersey"]');
         const first = document.querySelector('input[name="player' + i + '_first"]');
         const last = document.querySelector('input[name="player' + i + '_last"]');
         const pos = document.querySelector('select[name="player' + i + '_position"]');
         
-        if (jersey && first && last && pos && normJersey(jersey.value) && first.value && last.value && pos.value) {
-          return true;
+        if (jersey && first && last && pos && normJersey(jersey.value) && first.value.trim() && last.value.trim() && pos.value) {
+          count++;
         }
       }
-      return false;
+      return count;
+    }
+
+    function hasHeadCoach() {
+      const coachFirst = document.querySelector('input[name="coach_first"]');
+      const coachLast = document.querySelector('input[name="coach_last"]');
+      return coachFirst && coachLast && coachFirst.value.trim() && coachLast.value.trim();
+    }
+
+    function requireAtLeastOneCompletePlayer() {
+      return countCompletePlayers() >= 1;
     }
 
     function validatePlayersCompleteness() {
@@ -772,6 +784,38 @@
         }
       }
       return 0;
+    }
+
+    // === NEW: Comprehensive Submission Validation ===
+    function validateForSubmission() {
+      // Check minimum players requirement
+      const completePlayerCount = countCompletePlayers();
+      if (completePlayerCount < MIN_REQUIRED_PLAYERS) {
+        alert(`You need at least ${MIN_REQUIRED_PLAYERS} complete players to submit the roster. You currently have ${completePlayerCount} complete players.`);
+        return false;
+      }
+
+      // Check head coach requirement
+      if (!hasHeadCoach()) {
+        alert('A Head Coach is required. Please fill in the Head Coach\'s first and last name in the Staff section.');
+        return false;
+      }
+
+      // Check for duplicates
+      checkDuplicates();
+      if (document.getElementById('dupWarn').style.display === 'block') {
+        alert('Please resolve duplicate jersey numbers before submitting.');
+        return false;
+      }
+
+      // Check incomplete players (partial data)
+      const incompleteRow = validatePlayersCompleteness();
+      if (incompleteRow) {
+        alert(`Player #${incompleteRow} has incomplete information. Please complete all required fields (jersey, first name, last name, position) or remove the partial data.`);
+        return false;
+      }
+
+      return true;
     }
 
     // === Build Roster Data (normalized and sorted) ===
@@ -872,8 +916,15 @@
       
       const players = document.createElement('div');
       players.className = 'col-6';
-      const h3b = document.createElement('h3'); h3b.textContent = `🎯 Players (${roster.players.length}) - Sorted by Jersey #`;
+      const h3b = document.createElement('h3'); 
+      h3b.textContent = `🎯 Players (${roster.players.length}) - Sorted by Jersey #`;
+      // Add validation status
+      if (roster.players.length < MIN_REQUIRED_PLAYERS) {
+        h3b.style.color = '#ef4444';
+        h3b.textContent += ` ⚠️ Need ${MIN_REQUIRED_PLAYERS - roster.players.length} more`;
+      }
       players.append(h3b);
+      
       if (roster.players.length) {
         const ul = document.createElement('ul'); ul.style.margin = 0; ul.style.paddingLeft = '20px';
         roster.players.forEach(p => {
@@ -888,8 +939,15 @@
       
       const staff = document.createElement('div');
       staff.className = 'col-6';
-      const h3c = document.createElement('h3'); h3c.textContent = `👨‍💼 Coaching Staff (${roster.staff.length})`;
+      const h3c = document.createElement('h3'); 
+      h3c.textContent = `👨‍💼 Coaching Staff (${roster.staff.length})`;
+      // Add head coach validation status
+      if (!hasHeadCoach()) {
+        h3c.style.color = '#ef4444';
+        h3c.textContent += ` ⚠️ Head Coach Required`;
+      }
       staff.append(h3c);
+      
       if (roster.staff.length) {
         const ul = document.createElement('ul'); ul.style.margin = 0; ul.style.paddingLeft = '20px';
         roster.staff.forEach(s => {
@@ -1180,6 +1238,15 @@
           }
         }
       }
+
+      // Step 3: Check head coach requirement
+      if (currentStep === 3) {
+        if (!hasHeadCoach()) {
+          alert('Please fill in the Head Coach\'s first and last name before proceeding.');
+          document.querySelector('input[name="coach_first"]').focus();
+          return false;
+        }
+      }
       
       return true;
     }
@@ -1286,6 +1353,11 @@
         const ok = document.getElementById('okMsg');
         ok.style.display = 'none';
 
+        // NEW: Comprehensive submission validation
+        if (!validateForSubmission()) {
+          return;
+        }
+
         const fd = new FormData(form);
         const submitEmail = fd.get('submitterEmail');
         if (submitEmail) {
@@ -1306,6 +1378,23 @@
         }
 
         const roster = buildRoster(fd);
+        
+        // NEW: Double-check that we have valid roster data before sending email
+        if (!roster.teamName || !roster.league || !roster.submitterName || !roster.submitterEmail) {
+          alert('Missing required team information. Please check all required fields.');
+          return;
+        }
+
+        if (roster.players.length < MIN_REQUIRED_PLAYERS) {
+          alert(`Cannot submit: Need at least ${MIN_REQUIRED_PLAYERS} complete players.`);
+          return;
+        }
+
+        if (!roster.staff.some(s => s.role === 'Head Coach' && s.firstName && s.lastName)) {
+          alert('Cannot submit: Head Coach information is required.');
+          return;
+        }
+
         const params = {
           team_name: roster.teamName,
           league: roster.leagueEnglish,
