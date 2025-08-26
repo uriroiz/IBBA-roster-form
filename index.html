@@ -107,6 +107,43 @@
     .btn-outline { background: transparent; color: var(--ink-2); border: 1px solid var(--brd); }
 
     .loading { display: none; text-align: center; color: var(--brand); font-weight: 800; margin-top: 10px; }
+    
+    /* Enhanced submission feedback */
+    .submission-overlay { 
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+      background: rgba(0,0,0,0.8); z-index: 9999; display: none;
+      justify-content: center; align-items: center;
+    }
+    .submission-modal {
+      background: white; padding: 40px; border-radius: 16px; text-align: center; 
+      max-width: 500px; margin: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      animation: modalAppear 0.3s ease-out;
+    }
+    @keyframes modalAppear { 
+      from { opacity: 0; transform: scale(0.9) translateY(-20px); } 
+      to { opacity: 1; transform: scale(1) translateY(0); } 
+    }
+    .submission-modal h2 { margin: 0 0 20px; color: var(--ok); font-size: 1.8rem; }
+    .submission-modal p { margin: 10px 0; color: var(--ink-2); line-height: 1.5; }
+    .spinner { 
+      width: 60px; height: 60px; border: 4px solid #e5e7eb; 
+      border-top-color: var(--brand); border-radius: 50%; 
+      animation: spin 1s linear infinite; margin: 20px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .success-icon { 
+      width: 80px; height: 80px; margin: 0 auto 20px; 
+      background: var(--ok); border-radius: 50%; 
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 2.5rem; font-weight: bold;
+    }
+    .pulse-success { animation: pulse 2s infinite; }
+    @keyframes pulse { 
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    
     .table-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
 
     .step-navigation { display: flex; justify-content: space-between; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--brd); }
@@ -129,7 +166,7 @@
     <p class="subtitle">Official roster form for IBBA league teams • Powered by Pixellot Advantage</p>
 
     <div class="version-info" aria-live="polite">
-      <span id="versionBadge" class="version">Version 3.23.4</span>
+      <span id="versionBadge" class="version">Version 3.24.0</span>
       <span class="date">Updated: August 2025</span>
     </div>
 
@@ -372,6 +409,15 @@
       <div id="loading" class="loading">🔄 Submitting your roster...</div>
       <div id="okMsg" class="status status--ok" role="status" aria-live="polite">✅ Action complete.</div>
     </form>
+
+    <!-- Submission Modal Overlay -->
+    <div id="submissionOverlay" class="submission-overlay">
+      <div class="submission-modal">
+        <div id="submissionContent">
+          <!-- Content will be populated by JavaScript -->
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -386,7 +432,7 @@
     const DATA_SINK_URL = 'https://script.google.com/macros/s/AKfycbzH1bA7o3x_Px6J7fKMsVPMDz3WYrgFo8BhK-jFIwdKzKOmQttpyBG3iGMqR4FayMDU/exec';
     const DATA_SINK_KEY = 'Pixellot2@25'; // TODO: move validation off the client and sign requests server-side
 
-    const APP_VERSION = '3.23.4'; // Bumped version for fixes
+    const APP_VERSION = '3.24.2'; // Added email/phone requirement for all staff with names
     const BUILD_DATE = new Date().toISOString().slice(0,10);
 
     const CURRENT_SEASON_START_YEAR = 2025;
@@ -397,7 +443,7 @@
     const DEFAULT_PLAYER_ROWS = 16;
     const HARD_MAX_PLAYERS = 40;
     const MIN_REQUIRED_PLAYERS = 8; // NEW: Minimum required players for submission
-    const STORAGE_KEY = "ibbaRosterDraft_v3234"; // bumped for new validation features
+    const STORAGE_KEY = "ibbaRosterDraft_v3242"; // bumped for complete staff validation
 
     // === Multi-Step Navigation ===
     let currentStep = 1;
@@ -441,6 +487,65 @@
       if (step === 4) {
         updateReviewContent();
       }
+    }
+
+    // === Enhanced Modal Functions ===
+    function showSubmissionModal(content) {
+      const overlay = document.getElementById('submissionOverlay');
+      const contentDiv = document.getElementById('submissionContent');
+      contentDiv.innerHTML = content;
+      overlay.style.display = 'flex';
+      document.body.style.overflow = 'hidden'; // Prevent scrolling
+    }
+
+    function hideSubmissionModal() {
+      const overlay = document.getElementById('submissionOverlay');
+      overlay.style.display = 'none';
+      document.body.style.overflow = ''; // Restore scrolling
+    }
+
+    function showSubmittingModal() {
+      showSubmissionModal(`
+        <div class="spinner"></div>
+        <h2>Submitting Your Roster...</h2>
+        <p><strong>Please wait - do not close this page or click back.</strong></p>
+        <p>We're processing your roster submission and sending confirmation emails.</p>
+        <p>This usually takes 10-15 seconds.</p>
+      `);
+    }
+
+    function showSuccessModal() {
+      showSubmissionModal(`
+        <div class="success-icon pulse-success">✓</div>
+        <h2>Roster Submitted Successfully!</h2>
+        <p><strong>Your IBBA team roster has been submitted.</strong></p>
+        <p>• CSV file downloaded to your device<br>
+           • Data saved to IBBA system<br>
+           • Roster information processed</p>
+        <p style="margin-top: 20px; padding: 16px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534;">
+          <strong>Next Steps:</strong><br>
+          Keep the CSV file as your official roster record.
+        </p>
+        <button type="button" class="btn btn-primary" onclick="window.location.href='https://uriroiz.github.io/IBBA-roster-form/'" style="margin-top: 20px;">
+          Return to Main Page
+        </button>
+      `);
+    }
+
+    function showErrorModal(message) {
+      showSubmissionModal(`
+        <div style="width: 80px; height: 80px; margin: 0 auto 20px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 2.5rem;">!</div>
+        <h2 style="color: #ef4444;">Submission Issue</h2>
+        <p><strong>There was a problem with the email system.</strong></p>
+        <p>${message}</p>
+        <p style="margin-top: 20px; padding: 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #991b1b;">
+          <strong>Your CSV file has been downloaded.</strong><br>
+          Please email it manually to: <strong>pixellotibba@gmail.com</strong>
+        </p>
+        <button type="button" class="btn btn-primary" onclick="window.location.href='https://uriroiz.github.io/IBBA-roster-form/'" style="margin-top: 20px;">
+          Return to Main Page
+        </button>
+      `);
     }
 
     // === Email Validation (unified) ===
@@ -762,7 +867,39 @@
     function hasHeadCoach() {
       const coachFirst = document.querySelector('input[name="coach_first"]');
       const coachLast = document.querySelector('input[name="coach_last"]');
-      return coachFirst && coachLast && coachFirst.value.trim() && coachLast.value.trim();
+      const coachEmail = document.querySelector('input[name="coach_email"]');
+      const coachPhone = document.querySelector('input[name="coach_phone"]');
+      return coachFirst && coachLast && coachEmail && coachPhone && 
+             coachFirst.value.trim() && coachLast.value.trim() && 
+             coachEmail.value.trim() && coachPhone.value.trim();
+    }
+
+    function validateAllStaff() {
+      const staffRoles = ['coach', 'asst1', 'asst2', 'asst3', 'gm'];
+      const roleLabels = ['Head Coach', 'Assistant Coach 1', 'Assistant Coach 2', 'Assistant Coach 3', 'General Manager'];
+      
+      for (let i = 0; i < staffRoles.length; i++) {
+        const role = staffRoles[i];
+        const roleLabel = roleLabels[i];
+        const firstInput = document.querySelector('input[name="' + role + '_first"]');
+        const lastInput = document.querySelector('input[name="' + role + '_last"]');
+        const emailInput = document.querySelector('input[name="' + role + '_email"]');
+        const phoneInput = document.querySelector('input[name="' + role + '_phone"]');
+        
+        if (firstInput && firstInput.value.trim()) {
+          // If first name is filled, require last name, email, and phone
+          if (!lastInput || !lastInput.value.trim()) {
+            return { valid: false, message: roleLabel + ' is missing last name.' };
+          }
+          if (!emailInput || !emailInput.value.trim()) {
+            return { valid: false, message: roleLabel + ' is missing email address.' };
+          }
+          if (!phoneInput || !phoneInput.value.trim()) {
+            return { valid: false, message: roleLabel + ' is missing phone number.' };
+          }
+        }
+      }
+      return { valid: true };
     }
 
     function requireAtLeastOneCompletePlayer() {
@@ -797,7 +934,14 @@
 
       // Check head coach requirement
       if (!hasHeadCoach()) {
-        alert('A Head Coach is required. Please fill in the Head Coach\'s first and last name in the Staff section.');
+        alert('A Head Coach is required. Please fill in the Head Coach\'s first name, last name, email, and phone number in the Staff section.');
+        return false;
+      }
+
+      // Check all staff completeness
+      const staffValidation = validateAllStaff();
+      if (!staffValidation.valid) {
+        alert(staffValidation.message);
         return false;
       }
 
@@ -1239,11 +1383,17 @@
         }
       }
 
-      // Step 3: Check head coach requirement
+      // Step 3: Check complete staff information
       if (currentStep === 3) {
         if (!hasHeadCoach()) {
-          alert('Please fill in the Head Coach\'s first and last name before proceeding.');
+          alert('Please fill in all Head Coach information (first name, last name, email, and phone) before proceeding.');
           document.querySelector('input[name="coach_first"]').focus();
+          return false;
+        }
+        
+        const staffValidation = validateAllStaff();
+        if (!staffValidation.valid) {
+          alert(staffValidation.message);
           return false;
         }
       }
@@ -1306,24 +1456,19 @@
 
       document.getElementById('clearBtn').addEventListener('click', function() {
         if (!confirm('Clear all data (except your name/email if present)?')) return;
-        const keepName = document.getElementById('submitterName').value;
-        const keepEmail = document.getElementById('submitterEmail').value;
-        document.getElementById('rosterForm').reset();
-        ensureRows(DEFAULT_PLAYER_ROWS);
-        populateSeasonSelect();
-        document.getElementById('submitterName').value = keepName;
-        document.getElementById('submitterEmail').value = keepEmail;
-        document.getElementById('dupWarn').style.display = 'none';
-        document.getElementById('okMsg').style.display = 'none';
-        document.getElementById('emailWarn').style.display = 'none';
-        document.getElementById('submitterEmailError').style.display = 'none';
-        document.getElementById('newBtn').style.display = 'none';
-        currentStep = 1;
-        showStep(currentStep);
-        updateProgress();
+        createNewRoster();
       });
       
       document.getElementById('newBtn').addEventListener('click', function() {
+        createNewRoster();
+      });
+      
+      // Make submission modal buttons work with page redirect
+      window.hideSubmissionModal = function() {
+        window.location.href = 'https://uriroiz.github.io/IBBA-roster-form/';
+      };
+      
+      function createNewRoster() {
         const keepName = document.getElementById('submitterName').value;
         const keepEmail = document.getElementById('submitterEmail').value;
         document.getElementById('rosterForm').reset();
@@ -1340,7 +1485,7 @@
         showStep(currentStep);
         updateProgress();
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      });
+      }
 
       document.getElementById('saveBtn').addEventListener('click', saveDraft);
       document.getElementById('restoreBtn').addEventListener('click', restoreDraft);
@@ -1349,9 +1494,6 @@
         e.preventDefault();
         const form = e.currentTarget;
         const submitBtn = document.getElementById('submitBtn');
-        const loading = document.getElementById('loading');
-        const ok = document.getElementById('okMsg');
-        ok.style.display = 'none';
 
         // NEW: Comprehensive submission validation
         if (!validateForSubmission()) {
@@ -1390,8 +1532,8 @@
           return;
         }
 
-        if (!roster.staff.some(s => s.role === 'Head Coach' && s.firstName && s.lastName)) {
-          alert('Cannot submit: Head Coach information is required.');
+        if (!roster.staff.some(s => s.role === 'Head Coach' && s.firstName && s.lastName && s.email && s.phone)) {
+          alert('Cannot submit: Complete Head Coach information (name, email, phone) is required.');
           return;
         }
 
@@ -1404,8 +1546,10 @@
           roster_data: rosterSummary(roster)
         };
 
+        // Show submitting modal immediately and disable form interaction
         submitBtn.disabled = true;
-        loading.style.display = 'block';
+        showSubmittingModal();
+        
         const controller = new AbortController();
         const timeout = setTimeout(function() { controller.abort(); }, 15000);
 
@@ -1418,20 +1562,22 @@
           await sendEmailViaAPI(params, { signal: controller.signal });
           await sinkPromise;
           downloadCSV(roster);
-          ok.textContent = '✅ Roster submitted successfully. Email sent and CSV downloaded.';
-          ok.style.display = 'block';
+          
+          // Show success modal
+          showSuccessModal();
           document.getElementById('newBtn').style.display = 'inline-block';
+          
         } catch (err) {
           console.error('Email API error:', err);
-          alert('Email sending failed. A CSV file will be downloaded instead. Please email it to pixellotibba@gmail.com.');
           downloadCSV(roster);
-          ok.textContent = '⚠️ Email failed. CSV downloaded as fallback. Data sink may or may not have succeeded.';
-          ok.style.display = 'block';
+          
+          // Show error modal with instructions
+          showErrorModal('The email system is temporarily unavailable, but your roster data has been saved.');
           document.getElementById('newBtn').style.display = 'inline-block';
+          
         } finally {
           clearTimeout(timeout);
           submitBtn.disabled = false;
-          loading.style.display = 'none';
         }
       });
     });
